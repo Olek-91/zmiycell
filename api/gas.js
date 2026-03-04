@@ -1,9 +1,8 @@
-// api/gas.js — Vercel Serverless Function
+// api/gas.js — Vercel Serverless Function (ESM)
 // Проксіює запити від браузера до Google Apps Script
 // Вирішує проблему CORS: браузер → Vercel → Apps Script
 
 export default async function handler(req, res) {
-  // CORS заголовки для браузера
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
@@ -15,37 +14,35 @@ export default async function handler(req, res) {
 
   const gasUrl = process.env.GAS_URL
   if (!gasUrl) {
-    res.status(500).json({ ok: false, error: 'GAS_URL not configured in Vercel environment variables' })
+    res.status(500).json({ ok: false, error: 'GAS_URL not set in Vercel Environment Variables' })
     return
   }
 
-  // Передаємо всі query параметри від браузера до Apps Script
   const { action, params } = req.query
   if (!action) {
-    res.status(400).json({ ok: false, error: 'Missing action parameter' })
+    res.status(400).json({ ok: false, error: 'Missing action' })
     return
   }
 
-  const url = new URL(gasUrl)
-  url.searchParams.set('action', action)
-  if (params) url.searchParams.set('params', params)
-
   try {
+    const url = new URL(gasUrl)
+    url.searchParams.set('action', action)
+    if (params) url.searchParams.set('params', params)
+
     const gasRes = await fetch(url.toString(), {
       method: 'GET',
-      headers: { 'Accept': 'application/json' },
-      // Apps Script redirects — потрібно слідкувати за редіректами
       redirect: 'follow',
+      headers: { 'Accept': 'application/json' },
     })
 
-    if (!gasRes.ok) {
-      res.status(502).json({ ok: false, error: `Apps Script HTTP ${gasRes.status}` })
-      return
-    }
+    const text = await gasRes.text()
 
-    const data = await gasRes.json()
+    let data
+    try { data = JSON.parse(text) }
+    catch (_) { data = { ok: false, error: 'Invalid JSON from Apps Script: ' + text.slice(0, 200) } }
+
     res.status(200).json(data)
   } catch (err) {
-    res.status(502).json({ ok: false, error: 'Failed to reach Apps Script: ' + err.message })
+    res.status(502).json({ ok: false, error: err.message })
   }
 }
