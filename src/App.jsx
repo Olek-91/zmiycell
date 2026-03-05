@@ -935,7 +935,7 @@ export default function App() {
 
     {/* PAGE */}
     {PAGES[page]}
-    <div style={{height:16}}/>
+    <div style={{height:80}}/>
 
     {/* NAV */}
     <nav style={{position:'fixed',bottom:0,left:0,right:0,background:'#0d1117',borderTop:`1px solid ${G.b1}`,display:'flex',zIndex:200,paddingBottom:'env(safe-area-inset-bottom,0)'}}>
