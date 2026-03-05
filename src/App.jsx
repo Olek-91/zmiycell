@@ -478,7 +478,7 @@ export default function App() {
         </Card>}
 
         <SubmitBtn onClick={doWriteoff}>✓ СПИСАТИ МАТЕРІАЛИ</SubmitBtn>
-        <div style={{height:16}}/>
+        <div style={{height:160}}/>
       </>}
 
       {prodTab==='prep' && <PrepTab
@@ -936,7 +936,7 @@ export default function App() {
 
     {/* PAGE */}
     {PAGES[page]}
-    <div style={{height:16}}/>
+    <div style={{height:160}}/>
 
     {/* NAV */}
     <nav style={{position:'fixed',bottom:0,left:0,right:0,background:'#0d1117',borderTop:`1px solid ${G.b1}`,display:'flex',zIndex:200,paddingBottom:'env(safe-area-inset-bottom,0)'}}>
