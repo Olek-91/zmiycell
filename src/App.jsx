@@ -426,7 +426,7 @@ export default function App() {
   //  PAGES
   // ════════════════════════════════════════════════════════
   const wrap = (children) =>
-    <div style={{padding:'12px 12px 20px',maxWidth:700,margin:'0 auto'}}>{children}</div>
+    <div style={{padding:'12px 12px 0',maxWidth:700,margin:'0 auto'}}>{children}</div>
 
   // ── Production ────────────────────────────────────────────
   const PageProd = () => {
@@ -906,6 +906,20 @@ export default function App() {
   // ════════════════════════════════════════════════════════
   //  LAYOUT
   // ════════════════════════════════════════════════════════
+  // Auto-measure nav height and set body padding
+  const navRef = useRef(null)
+  useEffect(() => {
+    const updatePad = () => {
+      if (navRef.current) {
+        const h = navRef.current.offsetHeight
+        document.body.style.paddingBottom = h + 'px'
+      }
+    }
+    updatePad()
+    window.addEventListener('resize', updatePad)
+    return () => window.removeEventListener('resize', updatePad)
+  }, [])
+
   const NAV = [['prod','⚙','ВИР.'],['stock','📦','СКЛАД'],['repair','🔧','РЕМОНТ'],['workers','👷','КОМАНДА'],['tools','🛠','ІНСТР.'],['log','📋','ЖУРНАЛ']]
   const PAGES = {prod:<PageProd/>,stock:<PageStock/>,repair:<PageRepair/>,workers:<PageWorkers/>,tools:<PageTools/>,log:<PageLog/>}
 
@@ -935,12 +949,10 @@ export default function App() {
     </div>
 
     {/* PAGE */}
-    <div id="page-content">
-      {PAGES[page]}
-    </div>
+    {PAGES[page]}
 
     {/* NAV */}
-    <nav style={{background:'#0d1117',borderTop:`1px solid ${G.b1}`,display:'flex',zIndex:200,paddingBottom:'env(safe-area-inset-bottom,0)',flexShrink:0}}>
+    <nav ref={navRef} style={{position:'fixed',bottom:0,left:0,right:0,background:'#0d1117',borderTop:`1px solid ${G.b1}`,display:'flex',zIndex:200,paddingBottom:'env(safe-area-inset-bottom,0)'}}>
       {NAV.map(([k,icon,label])=>
         <button key={k} onClick={()=>setPage(k)} style={{flex:1,padding:'10px 4px 8px',display:'flex',flexDirection:'column',alignItems:'center',gap:2,background:'none',border:'none',cursor:'pointer',color:page===k?G.or:G.t2,transition:'.15s'}}>
           <span style={{fontSize:20}}>{icon}</span>
