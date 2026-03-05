@@ -15,7 +15,11 @@ const GLOBAL_CSS = `
 input,select{background:#0f172a;border:1px solid #374151;color:#e5e7eb;border-radius:8px;padding:8px 12px;font-family:'Fira Code',monospace;font-size:14px;outline:none;width:100%;transition:border-color .15s}
 input:focus,select:focus{border-color:#f97316}
 select option{background:#1f2937}
-html,body,#root{min-height:100%;}
+html,body{height:100%;}
+#root{height:100%;display:flex;flex-direction:column;}
+.page-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+.tab-nav::-webkit-scrollbar{display:none;}
+.tab-nav{scrollbar-width:none;}
 `
 
 // ─── Default materials ────────────────────────────────────
@@ -62,6 +66,19 @@ const todayStr = () => new Date().toLocaleDateString('uk-UA',{day:'2-digit',mont
 const nowStr   = () => new Date().toLocaleString('uk-UA',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})
 const uid      = () => String(Date.now()) + String(Math.floor(Math.random()*9999))
 const s = (styles) => Object.assign({},styles)
+
+// ─── Telegram alert ───────────────────────────────────────
+const TG_BOT_TOKEN = 'ВСТАВТЕ_TOKEN'
+const TG_CHAT_ID   = 'ВСТАВТЕ_CHAT_ID'
+const sendTelegram = async (text) => {
+  if (TG_BOT_TOKEN === 'ВСТАВТЕ_TOKEN') return
+  try {
+    await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({chat_id:TG_CHAT_ID, text, parse_mode:'HTML'})
+    })
+  } catch(e) { console.warn('TG error:', e) }
+}
 
 // ─── UI atoms ─────────────────────────────────────────────
 const Label = ({children}) =>
@@ -249,6 +266,20 @@ export default function App() {
       })
   }, [showToast])
 
+  // ── iOS scroll fix ──────────────────────────────────────────
+  useEffect(() => {
+    const nav = document.querySelector('nav')
+    if (!nav) return
+    const navH = nav.offsetHeight || 80
+    document.body.style.paddingBottom = navH + 'px'
+    // Re-measure after fonts/layout settle
+    const t = setTimeout(() => {
+      const h = nav.offsetHeight || 80
+      document.body.style.paddingBottom = h + 'px'
+    }, 300)
+    return () => clearTimeout(t)
+  }, [])
+
   // ── Derived ───────────────────────────────────────────────
   const prodType  = batteryTypes.find(t=>t.id===prodTypeId)  || batteryTypes[0]
   const stockType = batteryTypes.find(t=>t.id===stockTypeId) || batteryTypes[0]
@@ -329,6 +360,19 @@ export default function App() {
           setLog(prev => [entry, ...prev])
           setProdSerials([])
           showToast(`✓ Списано ${prodQty} акум. (${serials.join(', ')})`)
+          const lowMats = type.materials.filter(m => {
+            const c = consumed.find(cx=>cx.matId===m.id)
+            const ns = c ? Math.max(0, +(m.stock - c.fromStock).toFixed(4)) : m.stock
+            return ns <= m.minStock && m.minStock > 0
+          })
+          if (lowMats.length > 0) {
+            const lines = lowMats.map(m => {
+              const c = consumed.find(cx=>cx.matId===m.id)
+              const ns = c ? Math.max(0, +(m.stock - c.fromStock).toFixed(4)) : m.stock
+              return `• ${m.name}: <b>${ns} ${m.unit}</b> (мін: ${m.minStock})`
+            }).join('\n')
+            sendTelegram(`⚠️ <b>ZmiyCell — низький запас</b>\n\n${lines}\n\n📦 ${type.name}`)
+          }
         } catch {}
       }
     )
@@ -426,7 +470,7 @@ export default function App() {
   //  PAGES
   // ════════════════════════════════════════════════════════
   const wrap = (children) =>
-    <div style={{padding:'12px 12px 80px',maxWidth:700,margin:'0 auto'}}>{children}</div>
+    <div style={{padding:'12px 12px 24px',maxWidth:700,margin:'0 auto'}}>{children}</div>
 
   // ── Production ────────────────────────────────────────────
   const PageProd = () => {
@@ -908,54 +952,66 @@ export default function App() {
   // ════════════════════════════════════════════════════════
   const NAV = [['prod','⚙','ВИР.'],['stock','📦','СКЛАД'],['repair','🔧','РЕМОНТ'],['workers','👷','КОМАНДА'],['tools','🛠','ІНСТР.'],['log','📋','ЖУРНАЛ']]
   const PAGES = {prod:<PageProd/>,stock:<PageStock/>,repair:<PageRepair/>,workers:<PageWorkers/>,tools:<PageTools/>,log:<PageLog/>}
+  const pageKeys = NAV.map(n=>n[0])
+
+  const touchStartX = useRef(null)
+  const onTouchStart = (e) => { touchStartX.current = e.touches[0].clientX }
+  const onTouchEnd = (e) => {
+    if (touchStartX.current === null) return
+    const dx = e.changedTouches[0].clientX - touchStartX.current
+    if (Math.abs(dx) < 60) return
+    const idx = pageKeys.indexOf(page)
+    if (dx < 0 && idx < pageKeys.length-1) setPage(pageKeys[idx+1])
+    if (dx > 0 && idx > 0) setPage(pageKeys[idx-1])
+    touchStartX.current = null
+  }
 
   return <>
     <style>{GLOBAL_CSS}</style>
 
-    {/* HEADER */}
-    <div style={{background:'linear-gradient(135deg,#0d1117,#111827)',borderBottom:`1px solid ${G.b1}`,padding:'10px 14px',position:'sticky',top:0,zIndex:100}}>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',maxWidth:700,margin:'0 auto'}}>
+    <div style={{background:'linear-gradient(135deg,#0d1117,#111827)',borderBottom:`1px solid ${G.b1}`,padding:'10px 14px 0'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',maxWidth:700,margin:'0 auto',paddingBottom:8}}>
         <div style={{display:'flex',alignItems:'center',gap:8}}>
           <Logo size={30}/>
           <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:26,fontWeight:800,letterSpacing:2}}>ZmiyCell</span>
         </div>
-        <SyncBadge state={sync}/>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <span style={{fontSize:11,color:G.b2}}>{new Date().toLocaleDateString('uk-UA',{weekday:'short',day:'numeric',month:'short'})}</span>
+          <SyncBadge state={sync}/>
+        </div>
       </div>
-      <div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap',maxWidth:700,margin:'8px auto 0'}}>
+      <div style={{display:'flex',gap:6,flexWrap:'wrap',maxWidth:700,margin:'0 auto',paddingBottom:8}}>
         {[
           ['🔋', log.filter(l=>l.kind==='production').length, G.t1, G.b1, G.b2],
-          ['🔧', repairLog.length,                            G.t1, G.b1, G.b2],
+          ['🔧', repairLog.length, G.t1, G.b1, G.b2],
           ['📦', activePrep.length, activePrep.length>0?G.pu:G.t2, activePrep.length>0?'#1e1b4b':G.b1, activePrep.length>0?'#3730a3':G.b2],
         ].map(([icon,val,vc,bg,bd],i)=>
-          <span key={i} style={{background:bg,border:`1px solid ${bd}`,borderRadius:20,padding:'4px 12px',fontSize:12,color:G.t2}}>
+          <span key={i} style={{background:bg,border:`1px solid ${bd}`,borderRadius:20,padding:'3px 10px',fontSize:11,color:G.t2}}>
             {icon} <b style={{color:vc}}>{val}</b>
           </span>)}
-        <span style={{fontSize:11,color:G.b2,alignSelf:'center'}}>{new Date().toLocaleDateString('uk-UA',{weekday:'short',day:'numeric',month:'short'})}</span>
+      </div>
+      <div className="tab-nav" style={{display:'flex',overflowX:'auto',maxWidth:700,margin:'0 auto',borderTop:`1px solid ${G.b1}`}}>
+        {NAV.map(([k,icon,label])=>
+          <button key={k} onClick={()=>setPage(k)} style={{
+            flex:'0 0 auto',padding:'10px 16px',display:'flex',alignItems:'center',gap:5,
+            background:'none',border:'none',borderBottom:`2px solid ${page===k?G.or:'transparent'}`,
+            cursor:'pointer',color:page===k?G.or:G.t2,transition:'.15s',whiteSpace:'nowrap',
+            fontFamily:"'Barlow Condensed',sans-serif",fontSize:13,fontWeight:700,letterSpacing:.5
+          }}>
+            <span style={{fontSize:16}}>{icon}</span> {label}
+          </button>)}
       </div>
     </div>
 
-    {/* PAGE */}
-    {PAGES[page]}
+    <div className="page-scroll" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      {PAGES[page]}
+    </div>
 
-    {/* NAV */}
-    <nav style={{position:'fixed',bottom:0,left:0,right:0,background:'#0d1117',borderTop:`1px solid ${G.b1}`,display:'flex',zIndex:200,paddingBottom:'env(safe-area-inset-bottom,0)'}}>
-      {NAV.map(([k,icon,label])=>
-        <button key={k} onClick={()=>setPage(k)} style={{flex:1,padding:'10px 4px 8px',display:'flex',flexDirection:'column',alignItems:'center',gap:2,background:'none',border:'none',cursor:'pointer',color:page===k?G.or:G.t2,transition:'.15s'}}>
-          <span style={{fontSize:20}}>{icon}</span>
-          <span style={{fontFamily:"'Barlow Condensed',sans-serif",fontSize:11,fontWeight:700,letterSpacing:.5}}>{label}</span>
-        </button>)}
-    </nav>
-
-    {/* TOAST */}
     {toast && <Toast {...toast}/>}
-
-    {/* MODALS */}
     {modal?.type==='confirm'  && <ConfirmModal title={modal.title} body={modal.body} onYes={modal.onYes} onNo={closeModal}/>}
     {modal?.type==='history'  && <Modal onClose={closeModal}><HistoryModal mat={modal.mat} entries={modal.entries}/></Modal>}
   </>
-}
-
-// ─── Prep sub-component ───────────────────────────────────
+}// ─── Prep sub-component ───────────────────────────────────
 function PrepTab({batteryTypes, workers, prepItems, prodTypeId, onIssue, onReturn}) {
   const [wId,     setWId]    = useState(workers[0]?.id||'')
   const [matId,   setMatId]  = useState('')
