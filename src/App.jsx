@@ -15,6 +15,7 @@ const GLOBAL_CSS = `
 input,select{background:#0f172a;border:1px solid #374151;color:#e5e7eb;border-radius:8px;padding:8px 12px;font-family:'Fira Code',monospace;font-size:14px;outline:none;width:100%;transition:border-color .15s}
 input:focus,select:focus{border-color:#f97316}
 select option{background:#1f2937}
+body{padding-bottom:calc(70px + env(safe-area-inset-bottom, 16px)) !important;}
 `
 
 // ─── Default materials ────────────────────────────────────
