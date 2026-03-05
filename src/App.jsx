@@ -15,7 +15,7 @@ const GLOBAL_CSS = `
 input,select{background:#0f172a;border:1px solid #374151;color:#e5e7eb;border-radius:8px;padding:8px 12px;font-family:'Fira Code',monospace;font-size:14px;outline:none;width:100%;transition:border-color .15s}
 input:focus,select:focus{border-color:#f97316}
 select option{background:#1f2937}
-html,body,#root{min-height:100%;} body{padding-bottom:0 !important;}
+html,body,#root{min-height:100%;}
 `
 
 // ─── Default materials ────────────────────────────────────
@@ -426,7 +426,7 @@ export default function App() {
   //  PAGES
   // ════════════════════════════════════════════════════════
   const wrap = (children) =>
-    <div style={{padding:'12px 12px 0',maxWidth:700,margin:'0 auto'}}>{children}</div>
+    <div style={{padding:'12px 12px 80px',maxWidth:700,margin:'0 auto'}}>{children}</div>
 
   // ── Production ────────────────────────────────────────────
   const PageProd = () => {
@@ -906,20 +906,6 @@ export default function App() {
   // ════════════════════════════════════════════════════════
   //  LAYOUT
   // ════════════════════════════════════════════════════════
-  // Auto-measure nav height and set body padding
-  const navRef = useRef(null)
-  useEffect(() => {
-    const updatePad = () => {
-      if (navRef.current) {
-        const h = navRef.current.offsetHeight
-        document.body.style.paddingBottom = h + 'px'
-      }
-    }
-    updatePad()
-    window.addEventListener('resize', updatePad)
-    return () => window.removeEventListener('resize', updatePad)
-  }, [])
-
   const NAV = [['prod','⚙','ВИР.'],['stock','📦','СКЛАД'],['repair','🔧','РЕМОНТ'],['workers','👷','КОМАНДА'],['tools','🛠','ІНСТР.'],['log','📋','ЖУРНАЛ']]
   const PAGES = {prod:<PageProd/>,stock:<PageStock/>,repair:<PageRepair/>,workers:<PageWorkers/>,tools:<PageTools/>,log:<PageLog/>}
 
@@ -952,7 +938,7 @@ export default function App() {
     {PAGES[page]}
 
     {/* NAV */}
-    <nav ref={navRef} style={{position:'fixed',bottom:0,left:0,right:0,background:'#0d1117',borderTop:`1px solid ${G.b1}`,display:'flex',zIndex:200,paddingBottom:'env(safe-area-inset-bottom,0)'}}>
+    <nav style={{position:'fixed',bottom:0,left:0,right:0,background:'#0d1117',borderTop:`1px solid ${G.b1}`,display:'flex',zIndex:200,paddingBottom:'env(safe-area-inset-bottom,0)'}}>
       {NAV.map(([k,icon,label])=>
         <button key={k} onClick={()=>setPage(k)} style={{flex:1,padding:'10px 4px 8px',display:'flex',flexDirection:'column',alignItems:'center',gap:2,background:'none',border:'none',cursor:'pointer',color:page===k?G.or:G.t2,transition:'.15s'}}>
           <span style={{fontSize:20}}>{icon}</span>
