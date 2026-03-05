@@ -425,7 +425,7 @@ export default function App() {
   //  PAGES
   // ════════════════════════════════════════════════════════
   const wrap = (children) =>
-    <div style={{padding:'12px 12px 80px',maxWidth:700,margin:'0 auto'}}>{children}</div>
+    <div style={{padding:'12px 12px calc(80px + env(safe-area-inset-bottom, 20px))',maxWidth:700,margin:'0 auto'}}>{children}</div>
 
   // ── Production ────────────────────────────────────────────
   const PageProd = () => {
