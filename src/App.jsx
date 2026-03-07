@@ -241,7 +241,11 @@ export default function App() {
     gasCall('loadAll', [])
       .then(data => {
         setBatteryTypes(data.batteryTypes || [])
-        setWorkers(data.workers || [])
+        const wks = data.workers || []
+        if (!wks.find(w => w.id === 'TEAM_SHARED')) {
+          wks.unshift({ id: 'TEAM_SHARED', name: '🤝 СПІЛЬНИЙ СТІЛ (Команда)' })
+        }
+        setWorkers(wks)
         setTools(data.tools || [])
         setLog(data.log || [])
         setRepairLog(data.repairLog || [])
@@ -250,7 +254,8 @@ export default function App() {
           setProdTypeId(data.batteryTypes[0].id)
           setStockTypeId(data.batteryTypes[0].id)
         }
-        if (data.workers?.length) setProdWorker(data.workers[0].id)
+        if (wks.length > 1) setProdWorker(wks[1].id) // Default to first actual worker, not team
+        else if (wks.length > 0) setProdWorker(wks[0].id)
         setSync('ok')
       })
       .catch(e => {
@@ -268,15 +273,26 @@ export default function App() {
   const activePrep = prepItems.filter(p => p.status !== 'returned')
 
   // ── Build consumed list ───────────────────────────────────
+  // Order: 1. Personal Prep -> 2. Team Shared Prep -> 3. Global Stock
   const buildConsumed = useCallback((type, workerId, qty) => {
     if (!type) return []
-    const wPrep = prepItems.filter(p => p.workerId === workerId && p.typeId === type.id && p.status !== 'returned')
+    const myPrep = prepItems.filter(p => p.workerId === workerId && p.typeId === type.id && p.status !== 'returned')
+    const teamPrep = prepItems.filter(p => p.workerId === 'TEAM_SHARED' && p.typeId === type.id && p.status !== 'returned')
+
     return type.materials.map(m => {
-      const need = +(m.perBattery * qty).toFixed(4)
-      const prepAvail = wPrep.filter(p => p.matId === m.id).reduce((s, p) => +(s + p.qty - p.returnedQty).toFixed(4), 0)
-      const fromPrep = +Math.min(prepAvail, need).toFixed(4)
-      const fromStock = +(need - fromPrep).toFixed(4)
-      return { matId: m.id, name: m.name, unit: m.unit, amount: need, fromPrep, fromStock, totalStock: m.stock }
+      let need = +(m.perBattery * qty).toFixed(4)
+      const needOrig = need
+
+      const pAvail = myPrep.filter(p => p.matId === m.id).reduce((s, p) => +(s + p.qty - p.returnedQty).toFixed(4), 0)
+      const fromPersonal = +Math.min(pAvail, need).toFixed(4)
+      need = +(need - fromPersonal).toFixed(4)
+
+      const tAvail = teamPrep.filter(p => p.matId === m.id).reduce((s, p) => +(s + p.qty - p.returnedQty).toFixed(4), 0)
+      const fromTeam = +Math.min(tAvail, need).toFixed(4)
+      need = +(need - fromTeam).toFixed(4)
+
+      const fromStock = need
+      return { matId: m.id, name: m.name, unit: m.unit, amount: needOrig, fromPersonal, fromTeam, fromStock, totalStock: m.stock }
     })
   }, [prepItems])
 
@@ -313,46 +329,78 @@ export default function App() {
           count: prodQty, serials, consumed, kind: 'production', repairNote: '',
         }
         try {
-          await api('writeOff', [entry])
-          // Local state sync
-          setBatteryTypes(prev => prev.map(t => t.id !== type.id ? t : {
-            ...t, materials: t.materials.map(m => {
-              const c = consumed.find(c => c.matId === m.id)
-              return c ? { ...m, stock: Math.max(0, +(m.stock - c.fromStock).toFixed(4)) } : m
-            })
+          // Send all APIs concurrently. If name exists in multiple types, update them all
+          const syncTasks = []
+          const syncMatUpdates = [] // to update local state efficiently
+
+          consumed.forEach(c => {
+            if (c.fromStock > 0) {
+              const deduct = c.fromStock
+              batteryTypes.forEach(bt => {
+                const sameNamedMat = bt.materials.find(mx => mx.name === c.name)
+                if (sameNamedMat) {
+                  // Only push API calls for materials we actually found in those types to decrement across the board globally
+                  syncTasks.push(api('updateMaterialStock', [bt.id, sameNamedMat.id, -deduct]))
+                  syncMatUpdates.push({ typeId: bt.id, matId: sameNamedMat.id, deduct })
+                }
+              })
+            }
+          })
+
+          await Promise.all([api('writeOff', [entry]), ...syncTasks])
+
+          // Local state sync globally across all identical names
+          setBatteryTypes(prev => prev.map(t => {
+            const updatesForType = syncMatUpdates.filter(u => u.typeId === t.id)
+            if (!updatesForType.length) return t
+            return {
+              ...t, materials: t.materials.map(m => {
+                const up = updatesForType.find(u => u.matId === m.id)
+                return up ? { ...m, stock: Math.max(0, +(m.stock - up.deduct).toFixed(4)) } : m
+              })
+            }
           }))
+
           // Deduct prep
           setPrepItems(prev => {
             const next = prev.map(p => ({ ...p }))
             consumed.forEach(c => {
-              if (!c.fromPrep) return
-              let rem = c.fromPrep
-              next.filter(p => p.workerId === worker.id && p.typeId === type.id && p.matId === c.matId && p.status !== 'returned').forEach(p => {
-                if (rem <= 0) return
-                const avail = p.qty - p.returnedQty
-                const use = Math.min(avail, rem)
-                p.returnedQty = +(p.returnedQty + use).toFixed(4)
-                p.status = p.returnedQty >= p.qty ? 'returned' : 'partial'
-                rem = +(rem - use).toFixed(4)
-              })
+              const handlePrepDeduct = (wId, deductAmt) => {
+                if (!deductAmt) return
+                let rem = deductAmt
+                next.filter(p => p.workerId === wId && p.typeId === type.id && p.matId === c.matId && p.status !== 'returned').forEach(p => {
+                  if (rem <= 0) return
+                  const avail = p.qty - p.returnedQty
+                  const use = Math.min(avail, rem)
+                  p.returnedQty = +(p.returnedQty + use).toFixed(4)
+                  p.status = p.returnedQty >= p.qty ? 'returned' : 'partial'
+                  rem = +(rem - use).toFixed(4)
+                })
+              }
+              handlePrepDeduct(worker.id, c.fromPersonal)
+              handlePrepDeduct('TEAM_SHARED', c.fromTeam)
             })
             return next
           })
+
           setLog(prev => [entry, ...prev])
           setProdSerials([])
           showToast(`✓ Списано ${prodQty} акум. (${serials.join(', ')})`)
+
+          // Trigger Low Mats Alert 
           const lowMats = type.materials.filter(m => {
-            const c = consumed.find(cx => cx.matId === m.id)
-            const ns = c ? Math.max(0, +(m.stock - c.fromStock).toFixed(4)) : m.stock
+            const up = syncMatUpdates.find(u => u.matId === m.id)
+            const ns = up ? Math.max(0, +(m.stock - up.deduct).toFixed(4)) : m.stock
             return ns <= m.minStock && m.minStock > 0
           })
+
           if (lowMats.length > 0) {
             const lines = lowMats.map(m => {
-              const c = consumed.find(cx => cx.matId === m.id)
-              const ns = c ? Math.max(0, +(m.stock - c.fromStock).toFixed(4)) : m.stock
+              const up = syncMatUpdates.find(u => u.matId === m.id)
+              const ns = up ? Math.max(0, +(m.stock - up.deduct).toFixed(4)) : m.stock
               return `• ${m.name}: <b>${ns} ${m.unit}</b> (мін: ${m.minStock})`
             }).join('\n')
-            sendTelegram(`⚠️ <b>ZmiyCell — низький запас</b>\n\n${lines}\n\n📦 ${type.name}`)
+            sendTelegram(`⚠️ <b>ZmiyCell — низький запас</b>\n\n${lines}`)
           }
         } catch { }
       }
@@ -426,12 +474,33 @@ export default function App() {
       async () => {
         closeModal()
         try {
-          await api('addRepair', [repairEntry])
-          setBatteryTypes(prev => prev.map(t => t.id !== repairEntry.typeId ? t : {
-            ...t, materials: t.materials.map(m => {
-              const rm = repairEntry.materials.find(r => r.matId === m.id && r.selected && r.qty > 0)
-              return rm ? { ...m, stock: Math.max(0, +(m.stock - rm.qty).toFixed(4)) } : m
-            })
+          const syncTasks = []
+          const syncMatUpdates = []
+
+          repairEntry.materials.forEach(r => {
+            if (r.selected && r.qty > 0) {
+              const deduct = r.qty
+              batteryTypes.forEach(bt => {
+                const sameNamedMat = bt.materials.find(mx => mx.name === r.matName)
+                if (sameNamedMat) {
+                  syncTasks.push(api('updateMaterialStock', [bt.id, sameNamedMat.id, -deduct]))
+                  syncMatUpdates.push({ typeId: bt.id, matId: sameNamedMat.id, deduct })
+                }
+              })
+            }
+          })
+
+          await Promise.all([api('addRepair', [repairEntry]), ...syncTasks])
+
+          setBatteryTypes(prev => prev.map(t => {
+            const updatesForType = syncMatUpdates.filter(u => u.typeId === t.id)
+            if (!updatesForType.length) return t
+            return {
+              ...t, materials: t.materials.map(m => {
+                const up = updatesForType.find(u => u.matId === m.id)
+                return up ? { ...m, stock: Math.max(0, +(m.stock - up.deduct).toFixed(4)) } : m
+              })
+            }
           }))
           setRepairLog(prev => [repairEntry, ...prev])
           setLog(prev => [{
@@ -496,7 +565,8 @@ export default function App() {
             return <div key={c.matId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: `1px solid ${G.b1}`, fontSize: 13 }}>
               <span style={{ color: ok ? G.t1 : G.rd, flex: 1, paddingRight: 8 }}>{c.name}</span>
               <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                {c.fromPrep > 0 && <Chip bg='#2e1065' color='#c084fc' bd='#4c1d95'>📦{c.fromPrep}</Chip>}
+                {c.fromPersonal > 0 && <Chip bg='#2e1065' color='#c084fc' bd='#4c1d95'>👷{c.fromPersonal}</Chip>}
+                {c.fromTeam > 0 && <Chip bg='#1e3a8a' color='#93c5fd' bd='#1e40af'>🤝{c.fromTeam}</Chip>}
                 {c.fromStock > 0 && <Chip bg='#1c1007' color='#fb923c' bd='#9a3412'>🏭{c.fromStock}</Chip>}
                 <span style={{ color: ok ? G.gn : G.rd, fontWeight: 600, minWidth: 60, textAlign: 'right' }}>{c.amount} {c.unit}</span>
               </div>
@@ -527,20 +597,52 @@ export default function App() {
     const restock = async (matId) => {
       const qty = parseFloat(rsVals[matId] || 0)
       if (!qty || qty <= 0) return showToast('Введіть кількість', 'err')
-      const res = await api('updateMaterialStock', [type.id, matId, qty])
-      setBatteryTypes(prev => prev.map(t => t.id !== type.id ? t : {
-        ...t, materials: t.materials.map(m => m.id !== matId ? m : { ...m, stock: res.stock })
+
+      const targetMat = type.materials.find(m => m.id === matId)
+      if (!targetMat) return
+
+      const syncTasks = []
+      const syncUpdates = []
+
+      batteryTypes.forEach(bt => {
+        const sameNamedMat = bt.materials.find(mx => mx.name === targetMat.name)
+        if (sameNamedMat) {
+          syncTasks.push(api('updateMaterialStock', [bt.id, sameNamedMat.id, qty]))
+          syncUpdates.push({ typeId: bt.id, matId: sameNamedMat.id, added: qty })
+        }
+      })
+
+      await Promise.all(syncTasks)
+
+      setBatteryTypes(prev => prev.map(t => {
+        const updates = syncUpdates.filter(u => u.typeId === t.id)
+        if (!updates.length) return t
+        return {
+          ...t, materials: t.materials.map(m => {
+            const up = updates.find(u => u.matId === m.id)
+            return up ? { ...m, stock: +(m.stock + up.added).toFixed(4) } : m
+          })
+        }
       }))
+
       setRsVals(v => ({ ...v, [matId]: '' }))
-      showToast(`✓ Поповнено на ${qty}`)
+      showToast(`✓ Поповнено на ${qty} (на всіх типах де є ${targetMat.name})`)
     }
 
     const editField = async (matId, field, old) => {
-      const val = prompt(field === 'name' ? 'Нова назва:' : field === 'stock' ? 'Новий залишок:' : field === 'perBattery' ? 'На 1 акумулятор:' : 'Мін. запас:', String(old))
+      const targetMat = type.materials.find(m => m.id === matId)
+      const val = prompt(field === 'name' ? 'Нова назва (ОБЕРЕЖНО, змінить імʼя лише для цього типу):' : field === 'stock' ? 'Новий залишок (змінює глобально):' : field === 'perBattery' ? 'На 1 акумулятор:' : 'Мін. запаc:', String(old))
       if (val === null || val === String(old)) return
       const parsed = field === 'name' ? val.trim() : parseFloat(val)
       if (field !== 'name' && isNaN(parsed)) return showToast('Невірне значення', 'err')
       if (!parsed && field === 'name') return
+
+      // If editing stock, globalize it. Other fields remain specific to this battery type
+      if (field === 'stock') {
+        const diff = parsed - old
+        return restock(matId) // We can reuse restock to apply the difference globally!
+      }
+
       await api('updateMaterialField', [type.id, matId, field, parsed])
       setBatteryTypes(prev => prev.map(t => t.id !== type.id ? t : {
         ...t, materials: t.materials.map(m => m.id !== matId ? m : { ...m, [field]: parsed })
@@ -799,12 +901,12 @@ export default function App() {
             <div style={{ width: 44, height: 44, background: G.b1, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>👷</div>
             <div style={{ flex: 1 }}>
               <div style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 17, fontWeight: 700 }}>{w.name}</div>
-              <div style={{ fontSize: 12, color: G.t2, marginTop: 2 }}>🔋 {prodCounts[w.name] || 0} шт · 🔧 {repCounts[w.name] || 0} рем.</div>
+              {w.id !== 'TEAM_SHARED' && <div style={{ fontSize: 12, color: G.t2, marginTop: 2 }}>🔋 {prodCounts[w.name] || 0} шт · 🔧 {repCounts[w.name] || 0} рем.</div>}
             </div>
-            <div style={{ display: 'flex', gap: 6 }}>
+            {w.id !== 'TEAM_SHARED' && <div style={{ display: 'flex', gap: 6 }}>
               <button onClick={() => renameWorker(w)} style={{ background: G.b1, border: `1px solid ${G.b2}`, color: G.cy, padding: '6px 10px', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>✎</button>
               <button onClick={() => deleteWorker(w)} style={{ background: '#450a0a', border: `1px solid #7f1d1d`, color: G.rd, padding: '6px 10px', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>✕</button>
-            </div>
+            </div>}
           </div>
           {wp.length > 0 && <div style={{ background: '#1e1b4b', border: `1px solid #3730a3`, borderRadius: 8, padding: '8px 10px', marginTop: 10 }}>
             <div style={{ fontFamily: "'Barlow Condensed',sans-serif", color: G.pu, fontWeight: 700, fontSize: 13, marginBottom: 5 }}>📦 НА РУКАХ</div>
