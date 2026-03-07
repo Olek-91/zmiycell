@@ -71,7 +71,7 @@ const s = (styles) => Object.assign({}, styles)
 
 // ─── Telegram alert ───────────────────────────────────────
 const TG_BOT_TOKEN = '8697742454:AAFOwspQgr22QE53UU8piGG_y1k4uy87LLE'
-const TG_CHAT_ID = '669591433'
+const TG_CHAT_ID = '-5239255917'
 const sendTelegram = async (text) => {
   if (TG_BOT_TOKEN === 'ВСТАВТЕ_TOKEN') return
   try {
