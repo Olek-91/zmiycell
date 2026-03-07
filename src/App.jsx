@@ -19,10 +19,9 @@ select option{background:#1f2937}
 html,body{height:100%;height:100dvh;margin:0;}
 #root{height:100%;height:100dvh;display:flex;flex-direction:column;}
 .page-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;}
-.tab-nav::-webkit-scrollbar{height:4px;}
-.tab-nav::-webkit-scrollbar-track{background:rgba(255,255,255,0.05);}
-.tab-nav::-webkit-scrollbar-thumb{background:#f97316;border-radius:4px;}
-.tab-nav{scrollbar-width:thin;scrollbar-color:#f97316 rgba(255,255,255,0.05);}
+.tab-nav::-webkit-scrollbar{display:none;}
+.tab-nav{scrollbar-width:none;}
+@media (min-width: 850px) { .tab-nav { justify-content: center; max-width: 100% !important; } }
 `
 
 // ─── Default materials ────────────────────────────────────
@@ -71,7 +70,7 @@ const uid = () => String(Date.now()) + String(Math.floor(Math.random() * 9999))
 const s = (styles) => Object.assign({}, styles)
 
 // ─── Telegram alert ───────────────────────────────────────
-const TG_BOT_TOKEN = 'ВСТАВТЕ_TOKEN'
+const TG_BOT_TOKEN = '8697742454:AAFOwspQgr22QE53UU8piGG_y1k4uy87LLE'
 const TG_CHAT_ID = 'ВСТАВТЕ_CHAT_ID'
 const sendTelegram = async (text) => {
   if (TG_BOT_TOKEN === 'ВСТАВТЕ_TOKEN') return
