@@ -19,8 +19,10 @@ select option{background:#1f2937}
 html,body{height:100%;height:100dvh;margin:0;}
 #root{height:100%;height:100dvh;display:flex;flex-direction:column;}
 .page-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;}
-.tab-nav::-webkit-scrollbar{display:none;}
-.tab-nav{scrollbar-width:none;}
+.tab-nav::-webkit-scrollbar{height:4px;}
+.tab-nav::-webkit-scrollbar-track{background:rgba(255,255,255,0.05);}
+.tab-nav::-webkit-scrollbar-thumb{background:#f97316;border-radius:4px;}
+.tab-nav{scrollbar-width:thin;scrollbar-color:#f97316 rgba(255,255,255,0.05);}
 `
 
 // ─── Default materials ────────────────────────────────────
