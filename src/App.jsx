@@ -173,18 +173,7 @@ function ConfirmModal({ title, body, onYes, onNo }) {
 
 function Logo({ size = 32 }) {
   return (
-    <svg width={size} height={Math.round(size * .86)} viewBox="0 0 140 120" fill="none">
-      <circle cx="75" cy="60" r="48" fill="#0a0f1a" stroke="#f97316" strokeWidth="2.5" />
-      <rect x="42" y="44" width="54" height="32" rx="4" fill="#1e293b" stroke="#334155" strokeWidth="1.5" />
-      <rect x="96" y="52" width="6" height="16" rx="2" fill="#334155" />
-      <rect x="46" y="49" width="10" height="22" rx="2" fill="#06b6d4" opacity=".9" />
-      <rect x="59" y="49" width="10" height="22" rx="2" fill="#06b6d4" opacity=".7" />
-      <rect x="72" y="49" width="10" height="22" rx="2" fill="#06b6d4" opacity=".5" />
-      <path d="M68 46L63 58h5L63 70l9-14h-5z" fill="#fbbf24" />
-      <path d="M30 70Q45 85 65 80Q85 75 100 80Q110 83 108 76Q115 65 105 56Q98 50 85 44Q70 37 55 42Q40 47 36 58Q32 68 30 70" stroke="#4ade80" strokeWidth="3.5" strokeLinecap="round" fill="none" />
-      <ellipse cx="17" cy="56" rx="9" ry="6" fill="#4ade80" transform="rotate(-20 17 56)" />
-      <path d="M9 57L4 54M9 57L4 60" stroke="#f87171" strokeWidth="1.4" strokeLinecap="round" />
-    </svg>
+    <img src="/logo.jpg" alt="ZmiyCell" style={{ width: size, height: size, objectFit: 'cover', borderRadius: '50%' }} />
   )
 }
 
