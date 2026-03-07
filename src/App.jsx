@@ -1024,19 +1024,56 @@ export default function App() {
       t.materials.forEach(m => {
         const days = m.perBattery > 0 ? m.stock / (m.perBattery * perDay) : Infinity
         if (days < 30 || m.stock <= m.minStock) {
-          lowMats.push({ type: t, mat: m, days: Math.floor(days) })
+          // Avoid pushing duplicate material names
+          if (!lowMats.find(x => x.mat.name === m.name)) {
+            lowMats.push({ type: t, mat: m, days: Math.floor(days) })
+          }
         }
       })
     })
 
-    const sendToTg = () => {
-      if (lowMats.length === 0) return showToast('Список порожній!', 'error')
-      const lines = lowMats.map(({ type, mat, days }) =>
-        `• ${mat.name} (${type.name}): <b>${mat.stock} ${mat.unit}</b> ` +
+    const setOrdered = async (matsToOrder, status) => {
+      const syncTasks = []
+      const syncUpdates = []
+
+      const names = [...new Set(matsToOrder.map(x => x.mat.name))]
+
+      batteryTypes.forEach(bt => {
+        bt.materials.forEach(mx => {
+          if (names.includes(mx.name)) {
+            syncTasks.push(api('updateMaterialField', [bt.id, mx.id, 'isOrdered', status]))
+            syncUpdates.push({ typeId: bt.id, matId: mx.id, isOrdered: status })
+          }
+        })
+      })
+
+      await Promise.all(syncTasks)
+
+      setBatteryTypes(prev => prev.map(t => {
+        const updates = syncUpdates.filter(u => u.typeId === t.id)
+        if (!updates.length) return t
+        return {
+          ...t, materials: t.materials.map(m => {
+            const up = updates.find(u => u.matId === m.id)
+            return up ? { ...m, isOrdered: status } : m
+          })
+        }
+      }))
+    }
+
+    const sendToTg = async () => {
+      const pendingMats = lowMats.filter(x => !x.mat.isOrdered)
+      if (pendingMats.length === 0) return showToast('Немає нових матеріалів для замовлення!', 'error')
+
+      const lines = pendingMats.map(({ mat, days }) =>
+        `• ${mat.name}: <b>${mat.stock} ${mat.unit}</b> ` +
         `(на ~${days}д, мін: ${mat.minStock})`
       ).join('\n')
+
       sendTelegram(`🛒 <b>ZmiyCell — Закупівля</b>\n\n${lines}`)
       showToast('✓ Відправлено в Telegram')
+
+      await setOrdered(pendingMats, true)
     }
 
     return wrap(<>
@@ -1045,19 +1082,30 @@ export default function App() {
         <div style={{ color: G.t2, fontSize: 13, marginBottom: 16 }}>Матеріали, яких залишилось менш ніж на 30 днів роботи.</div>
 
         {lowMats.length === 0 ? <Center>Всі матеріали в нормі</Center> :
-          lowMats.map(({ type, mat, days }, i) =>
-            <div key={i} style={{ background: G.card2, border: `1px solid ${G.b1}`, borderRadius: 10, padding: 12, marginBottom: 8, borderLeft: '3px solid #a78bfa' }}>
-              <div style={{ fontWeight: 600, fontSize: 14 }}>{mat.name}</div>
-              <div style={{ fontSize: 12, color: G.t2, marginTop: 2 }}>Для: {type.name}</div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-                <span style={{ color: G.or, fontWeight: 600 }}>{mat.stock} {mat.unit}</span>
-                <Chip bg='#450a0a' color={G.rd} bd='#7f1d1d'>~{days}д (мін {mat.minStock})</Chip>
+          lowMats.map((item, i) => {
+            const { type, mat, days } = item
+            const ordered = !!mat.isOrdered
+            return (
+              <div key={i} style={{ background: ordered ? G.card : G.card2, border: `1px solid ${G.b1}`, borderRadius: 10, padding: 12, marginBottom: 8, borderLeft: `3px solid ${ordered ? G.t2 : '#a78bfa'}`, opacity: ordered ? 0.6 : 1, transition: '0.2s' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>{mat.name}</div>
+                    <div style={{ fontSize: 12, color: G.t2, marginTop: 2 }}>{ordered ? '✅ В очікуванні доставки' : '⏳ Потребує замовлення'}</div>
+                  </div>
+                  <button onClick={() => setOrdered([item], !ordered)} style={{ background: ordered ? G.card2 : G.b1, border: `1px solid ${G.b2}`, color: ordered ? G.t2 : G.pu, padding: '4px 8px', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>
+                    {ordered ? 'Скасувати' : 'Позначити замов.'}
+                  </button>
+                </div>
+                {!ordered && <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                  <span style={{ color: G.or, fontWeight: 600 }}>{mat.stock} {mat.unit}</span>
+                  <Chip bg='#450a0a' color={G.rd} bd='#7f1d1d'>~{days}д (мін {mat.minStock})</Chip>
+                </div>}
               </div>
-            </div>
-          )
+            )
+          })
         }
 
-        {lowMats.length > 0 && <SubmitBtn color={G.pu} onClick={sendToTg}>✈ ВІДПРАВИТИ В TELEGRAM</SubmitBtn>}
+        {lowMats.filter(x => !x.mat.isOrdered).length > 0 && <SubmitBtn color={G.pu} onClick={sendToTg}>✈ ВІДПРАВИТИ В TELEGRAM</SubmitBtn>}
       </Card>
     </>)
   }
