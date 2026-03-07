@@ -1150,14 +1150,14 @@ export default function App() {
   return <>
     <style>{GLOBAL_CSS}</style>
 
-    <div style={{ background: 'linear-gradient(135deg,#0d1117,#111827)', borderBottom: `1px solid ${G.b1}`, padding: '10px 14px 0' }}>
+    <div style={{ position: 'sticky', top: 0, zIndex: 10, background: 'rgba(13, 17, 23, 0.85)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', borderBottom: `1px solid ${G.b1}`, padding: '10px 14px 0' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', maxWidth: 700, margin: '0 auto', paddingBottom: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Logo size={30} />
           <span style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 26, fontWeight: 800, letterSpacing: 2 }}>ZmiyCell</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 11, color: G.b2 }}>{new Date().toLocaleDateString('uk-UA', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
+          <span style={{ fontSize: 11, color: G.b2 }}>{todayStr().slice(0, 5)}</span>
           <SyncBadge state={sync} />
         </div>
       </div>
@@ -1171,7 +1171,7 @@ export default function App() {
             {icon} <b style={{ color: vc }}>{val}</b>
           </span>)}
       </div>
-      <div className="tab-nav" style={{ display: 'flex', overflowX: 'auto', maxWidth: 700, margin: '0 auto', borderTop: `1px solid ${G.b1}` }}>
+      <div className="tab-nav" style={{ display: 'flex', overflowX: 'auto', maxWidth: 700, margin: '0 auto', borderTop: `1px solid rgba(255,255,255,0.05)` }}>
         {NAV.map(([k, icon, label]) =>
           <button key={k} onClick={() => setPage(k)} style={{
             flex: '0 0 auto', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 5,
