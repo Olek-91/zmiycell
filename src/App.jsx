@@ -1087,19 +1087,26 @@ export default function App() {
             const ordered = !!mat.isOrdered
             return (
               <div key={i} style={{ background: ordered ? G.card : G.card2, border: `1px solid ${G.b1}`, borderRadius: 10, padding: 12, marginBottom: 8, borderLeft: `3px solid ${ordered ? G.t2 : '#a78bfa'}`, opacity: ordered ? 0.6 : 1, transition: '0.2s' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: 14 }}>{mat.name}</div>
-                    <div style={{ fontSize: 12, color: G.t2, marginTop: 2 }}>{ordered ? '✅ В очікуванні доставки' : '⏳ Потребує замовлення'}</div>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 8, border: `1px dashed ${G.b2}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: G.b2, background: G.card, flexShrink: 0, overflow: 'hidden' }}>
+                    {mat.photoUrl ? <img src={mat.photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '📷'}
                   </div>
-                  <button onClick={() => setOrdered([item], !ordered)} style={{ background: ordered ? G.card2 : G.b1, border: `1px solid ${G.b2}`, color: ordered ? G.t2 : G.pu, padding: '4px 8px', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>
-                    {ordered ? 'Скасувати' : 'Позначити замов.'}
-                  </button>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 14 }}>{mat.name}</div>
+                        <div style={{ fontSize: 12, color: G.t2, marginTop: 2 }}>{ordered ? '✅ В очікуванні доставки' : '⏳ Потребує замовлення'}</div>
+                      </div>
+                      <button onClick={() => setOrdered([item], !ordered)} style={{ background: ordered ? G.card2 : G.b1, border: `1px solid ${G.b2}`, color: ordered ? G.t2 : G.pu, padding: '4px 8px', borderRadius: 6, fontSize: 11, cursor: 'pointer', flexShrink: 0 }}>
+                        {ordered ? 'Скасувати' : 'Позначити замов.'}
+                      </button>
+                    </div>
+                    {!ordered && <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                      <span style={{ color: G.or, fontWeight: 600 }}>{mat.stock} {mat.unit}</span>
+                      <Chip bg='#450a0a' color={G.rd} bd='#7f1d1d'>~{days}д (мін {mat.minStock})</Chip>
+                    </div>}
+                  </div>
                 </div>
-                {!ordered && <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-                  <span style={{ color: G.or, fontWeight: 600 }}>{mat.stock} {mat.unit}</span>
-                  <Chip bg='#450a0a' color={G.rd} bd='#7f1d1d'>~{days}д (мін {mat.minStock})</Chip>
-                </div>}
               </div>
             )
           })
