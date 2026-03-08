@@ -17,8 +17,8 @@ input,select{background:#0f172a;border:1px solid #374151;color:#e5e7eb;border-ra
 input:focus,select:focus{border-color:#f97316}
 select option{background:#1f2937}
 html,body{height:100%;height:100dvh;margin:0;background:#0a0f1a url('/logo.jpg') center center / cover no-repeat fixed;}
-#root{height:100%;height:100dvh;display:flex;flex-direction:column;background:rgba(10,15,26,0.88);}
-.page-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+#root{height:100%;height:100dvh;display:flex;flex-direction:column;background:rgba(10,15,26,0.88);position:relative;overflow:hidden;}
+.page-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;transition:transform 0.15s ease-out;}
 .tab-nav::-webkit-scrollbar{display:none;}
 .tab-nav{scrollbar-width:none;}
 @media (min-width: 850px) { .tab-nav { justify-content: center; max-width: 100% !important; } }
@@ -186,6 +186,9 @@ export default function App() {
   const [sync, setSync] = useState('loading')
   const [toast, setToast] = useState(null)
   const [modal, setModal] = useState(null)   // {type, ...props}
+  const [pullDist, setPullDist] = useState(0)
+  const [isPulling, setIsPulling] = useState(false)
+  const startY = useRef(0)
 
   const [page, setPage] = useState('prod')
   const [prodTab, setProdTab] = useState('writeoff')
@@ -220,6 +223,37 @@ export default function App() {
     setModal({ type: 'confirm', title, body, onYes })
   }, [])
   const closeModal = () => setModal(null)
+
+  // ── Pull-to-refresh handlers ──────────────────────────────
+  const handleTouchStart = (e) => {
+    const el = e.currentTarget
+    if (el.scrollTop <= 0) {
+      startY.current = e.touches[0].pageY
+      setIsPulling(true)
+    }
+  }
+
+  const handleTouchMove = (e) => {
+    if (!isPulling) return
+    const dist = e.touches[0].pageY - startY.current
+    if (dist > 0) {
+      setPullDist(Math.min(dist * 0.4, 80))
+      if (dist > 10) {
+        if (e.cancelable) e.preventDefault()
+      }
+    } else {
+      setIsPulling(false)
+      setPullDist(0)
+    }
+  }
+
+  const handleTouchEnd = () => {
+    if (pullDist > 65) {
+      window.location.reload()
+    }
+    setIsPulling(false)
+    setPullDist(0)
+  }
 
   // ── API wrapper ───────────────────────────────────────────
   const api = useCallback(async (action, params = []) => {
@@ -679,8 +713,24 @@ export default function App() {
 
     const prepBadge = (matId) => prepItems.filter(p => p.typeId === type.id && p.matId === matId && p.status !== 'returned').reduce((s, p) => +(s + p.qty - p.returnedQty).toFixed(4), 0)
 
+    const addBatteryType = () => {
+      const name = prompt('Назва нового типу акумулятора:')
+      if (!name || !name.trim()) return
+      api('addBatteryType', [name.trim()]).then(res => {
+        const newType = { id: res.id, name: name.trim(), materials: [], color: G.or }
+        setBatteryTypes(p => [...p, newType])
+        setStockTypeId(res.id)
+        showToast('✓ Тип додано: ' + name)
+      }).catch(() => { })
+    }
+
     return wrap(<>
-      <TypeTabs types={batteryTypes} active={stockTypeId} onSelect={setStockTypeId} />
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
+        <div style={{ flex: 1, overflowX: 'auto' }}>
+          <TypeTabs types={batteryTypes} active={stockTypeId} onSelect={setStockTypeId} />
+        </div>
+        <button onClick={addBatteryType} style={{ background: G.b1, border: `1px solid ${G.b2}`, color: G.gn, padding: '10px 14px', borderRadius: 10, fontSize: 18, cursor: 'pointer', flexShrink: 0 }}>+</button>
+      </div>
       <input placeholder="🔍 Пошук матеріалу..." value={stockSearch} onChange={e => setStockSearch(e.target.value)} style={{ marginBottom: 10 }} />
 
       {mats.map(m => <div key={m.id} style={{ background: G.card, border: `1px solid ${G.b1}`, borderRadius: 12, padding: 12, marginBottom: 8, display: 'flex', gap: 10 }}>
@@ -1191,7 +1241,24 @@ export default function App() {
       </div>
     </div>
 
-    <div className="page-scroll" {...swipeHandlers}>
+    <div
+      className="page-scroll"
+      {...swipeHandlers}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      style={{ transform: `translateY(${pullDist}px)` }}
+    >
+      {pullDist > 10 && (
+        <div style={{
+          position: 'absolute', top: -40, left: 0, right: 0, height: 40,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: pullDist > 65 ? G.or : G.t2, fontSize: 12, fontWeight: 700,
+          fontFamily: "'Barlow Condensed',sans-serif"
+        }}>
+          {pullDist > 65 ? '✓ ВІДПУСТІТЬ ДЛЯ ОНОВЛЕННЯ' : '↓ ТЯГНІТЬ ДЛЯ ОНОВЛЕННЯ'}
+        </div>
+      )}
       {PAGES[page]}
     </div>
 
