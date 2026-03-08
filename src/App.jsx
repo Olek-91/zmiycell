@@ -16,8 +16,8 @@ const GLOBAL_CSS = `
 input,select{background:#0f172a;border:1px solid #374151;color:#e5e7eb;border-radius:8px;padding:8px 12px;font-family:'Fira Code',monospace;font-size:14px;outline:none;width:100%;transition:border-color .15s}
 input:focus,select:focus{border-color:#f97316}
 select option{background:#1f2937}
-html,body{height:100%;height:100dvh;margin:0;}
-#root{height:100%;height:100dvh;display:flex;flex-direction:column;}
+html,body{height:100%;height:100dvh;margin:0;background:#0a0f1a url('/logo.jpg') center center / cover no-repeat fixed;}
+#root{height:100%;height:100dvh;display:flex;flex-direction:column;background:rgba(10,15,26,0.88);}
 .page-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;}
 .tab-nav::-webkit-scrollbar{display:none;}
 .tab-nav{scrollbar-width:none;}
