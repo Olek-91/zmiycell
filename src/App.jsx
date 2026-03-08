@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSwipeable } from 'react-swipeable'
+import { Analytics } from '@vercel/analytics/react'
 import { gasCall } from './api.js'
 
 // ─── CSS ─────────────────────────────────────────────────
@@ -634,7 +635,7 @@ export default function App() {
       const val = prompt(field === 'name' ? 'Нова назва (ОБЕРЕЖНО, змінить імʼя лише для цього типу):' : field === 'stock' ? 'Новий залишок (змінює глобально):' : field === 'perBattery' ? 'На 1 акумулятор:' : 'Мін. запаc:', String(old))
       if (val === null || val === String(old)) return
       const parsed = field === 'name' ? val.trim() : parseFloat(val)
-      if (field !== 'name' && isNaN(parsed)) return showToast('Невірне значення', 'err')
+      if (field !== 'name' && isNaN(parsed)) return showToast('��евірне значення', 'err')
       if (!parsed && field === 'name') return
 
       // If editing stock, globalize it. Other fields remain specific to this battery type
@@ -1198,6 +1199,7 @@ export default function App() {
     {toast && <Toast {...toast} />}
     {modal?.type === 'confirm' && <ConfirmModal title={modal.title} body={modal.body} onYes={modal.onYes} onNo={closeModal} />}
     {modal?.type === 'history' && <Modal onClose={closeModal}><HistoryModal mat={modal.mat} entries={modal.entries} /></Modal>}
+    <Analytics />
   </>
 }// ─── Prep sub-component ───────────────────────────────────
 function PrepTab({ batteryTypes, workers, prepItems, prodTypeId, onIssue, onReturn }) {
