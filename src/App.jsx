@@ -27,7 +27,7 @@ html,body{height:100%;height:100dvh;margin:0;background:#0a0f1a url('/logo.jpg')
 `
 
 // ─── Конфіг авторизації ──────────────────────────────────
-const ADMIN_PIN = '1235' // Змінити на свій PIN
+const ADMIN_PIN = '1234' // Змініть на свій PIN
 const AUTH_KEY = 'zc_auth'
 
 // ─── Telegram ────────────────────────────────────────────
@@ -176,6 +176,14 @@ function AuthScreen({ onAuth }) {
   const [mode, setMode] = useState(null) // null | 'admin'
   const [pin, setPin] = useState('')
   const [err, setErr] = useState('')
+  const pinInputRef = useRef(null)
+
+  // Фокус на прихований input при відкритті PIN екрану
+  useEffect(() => {
+    if (mode === 'admin' && pinInputRef.current) {
+      pinInputRef.current.focus()
+    }
+  }, [mode])
 
   const enterPin = (d) => {
     if (pin.length >= 4) return
@@ -189,6 +197,12 @@ function AuthScreen({ onAuth }) {
         setTimeout(() => { setPin(''); setErr('') }, 800)
       }
     }
+  }
+
+  const handleKeyboard = (e) => {
+    if (e.key >= '0' && e.key <= '9') enterPin(e.key)
+    else if (e.key === 'Backspace') setPin(p => p.slice(0, -1))
+    else if (e.key === 'Escape') { setMode(null); setPin('') }
   }
 
   return (
@@ -207,23 +221,52 @@ function AuthScreen({ onAuth }) {
         </div>
       ) : (
         <div style={{ width: '100%', maxWidth: 280, textAlign: 'center' }}>
-          <div style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 16, color: G.t2, marginBottom: 16, letterSpacing: 1 }}>ВВЕДІТЬ PIN</div>
+          {/* Прихований input для фізичної клавіатури */}
+          <input
+            ref={pinInputRef}
+            type="tel"
+            inputMode="numeric"
+            value=""
+            onChange={() => {}}
+            onKeyDown={handleKeyboard}
+            style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 1, height: 1 }}
+            autoComplete="off"
+          />
+
+          <div style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 16, color: G.t2, marginBottom: 8, letterSpacing: 1 }}>ВВЕДІТЬ PIN</div>
+          <div style={{ fontSize: 11, color: G.b2, marginBottom: 16 }}>або наберіть з клавіатури</div>
+
+          {/* Індикатори */}
           <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginBottom: 24 }}>
             {[0, 1, 2, 3].map(i => (
-              <div key={i} style={{ width: 18, height: 18, borderRadius: '50%', background: pin.length > i ? G.or : G.b2, border: `2px solid ${pin.length > i ? G.or : G.b1}`, transition: '.15s' }} />
+              <div key={i} style={{ width: 18, height: 18, borderRadius: '50%', background: pin.length > i ? G.or : G.b2, border: `2px solid ${pin.length > i ? G.or : G.b1}`, transition: '.15s', boxShadow: pin.length > i ? `0 0 8px ${G.or}88` : 'none' }} />
             ))}
           </div>
-          {err && <div style={{ color: G.rd, fontSize: 13, marginBottom: 12 }}>{err}</div>}
+
+          {err && <div style={{ color: G.rd, fontSize: 13, marginBottom: 12, animation: 'pulse .3s ease' }}>{err}</div>}
+
+          {/* Цифровий пад */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 10 }}>
             {[1,2,3,4,5,6,7,8,9].map(d => (
-              <button key={d} onClick={() => enterPin(String(d))} style={{ padding: '18px 0', background: G.b1, border: `1px solid ${G.b2}`, color: G.t1, borderRadius: 12, fontSize: 22, fontFamily: "'Barlow Condensed',sans-serif", fontWeight: 700, cursor: 'pointer' }}>{d}</button>
+              <button
+                key={d}
+                onClick={() => { enterPin(String(d)); pinInputRef.current?.focus() }}
+                style={{ padding: '18px 0', background: G.b1, border: `1px solid ${G.b2}`, color: G.t1, borderRadius: 12, fontSize: 22, fontFamily: "'Barlow Condensed',sans-serif", fontWeight: 700, cursor: 'pointer', transition: '.1s', WebkitTapHighlightColor: 'transparent', userSelect: 'none' }}
+                onTouchStart={e => e.currentTarget.style.background = G.b2}
+                onTouchEnd={e => e.currentTarget.style.background = G.b1}
+              >{d}</button>
             ))}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <button onClick={() => { setMode(null); setPin('') }} style={{ padding: '18px 0', background: '#450a0a', border: 'none', color: G.rd, borderRadius: 12, fontSize: 14, fontFamily: "'Fira Code',monospace", cursor: 'pointer' }}>← Назад</button>
-            <button onClick={() => enterPin('0')} style={{ padding: '18px 0', background: G.b1, border: `1px solid ${G.b2}`, color: G.t1, borderRadius: 12, fontSize: 22, fontFamily: "'Barlow Condensed',sans-serif", fontWeight: 700, cursor: 'pointer' }}>0</button>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+            <button onClick={() => { setMode(null); setPin('') }} style={{ padding: '18px 0', background: '#450a0a', border: 'none', color: G.rd, borderRadius: 12, fontSize: 13, fontFamily: "'Fira Code',monospace", cursor: 'pointer' }}>← Назад</button>
+            <button
+              onClick={() => { enterPin('0'); pinInputRef.current?.focus() }}
+              style={{ padding: '18px 0', background: G.b1, border: `1px solid ${G.b2}`, color: G.t1, borderRadius: 12, fontSize: 22, fontFamily: "'Barlow Condensed',sans-serif", fontWeight: 700, cursor: 'pointer' }}
+              onTouchStart={e => e.currentTarget.style.background = G.b2}
+              onTouchEnd={e => e.currentTarget.style.background = G.b1}
+            >0</button>
+            <button onClick={() => { setPin(p => p.slice(0, -1)); pinInputRef.current?.focus() }} style={{ padding: '18px 0', background: G.card, border: `1px solid ${G.b2}`, color: G.t2, borderRadius: 12, fontSize: 18, cursor: 'pointer' }}>⌫</button>
           </div>
-          <button onClick={() => setPin(p => p.slice(0,-1))} style={{ width: '100%', marginTop: 10, padding: '12px 0', background: G.card, border: `1px solid ${G.b2}`, color: G.t2, borderRadius: 12, fontSize: 14, fontFamily: "'Fira Code',monospace", cursor: 'pointer' }}>⌫ Стерти</button>
         </div>
       )}
     </div>
@@ -1511,7 +1554,14 @@ function AppInner({ isAdmin, onLogout }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 11, color: G.b2 }}>{todayStr().slice(0, 5)}</span>
           <SyncBadge state={sync} />
-          <button onClick={onLogout} title="Вийти" style={{ background: 'transparent', border: 'none', color: G.t2, fontSize: 16, cursor: 'pointer', padding: '2px 6px' }}>⎋</button>
+          <button onClick={onLogout} title="Вийти" style={{ background: 'transparent', border: 'none', color: G.t2, cursor: 'pointer', padding: '2px 4px', display: 'flex', alignItems: 'center' }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="8" cy="6" r="2.2" fill="currentColor" opacity="0.9"/>
+              <path d="M4.5 16.5c0-2.5 1.6-3.8 3.5-3.8s3.5 1.3 3.5 3.8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.9"/>
+              <rect x="13" y="3.5" width="7" height="17" rx="1" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+              <path d="M17 12h-6m0 0l2-2m-2 2l2 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
         </div>
       </div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', maxWidth: 700, margin: '0 auto', paddingBottom: 8 }}>
