@@ -777,6 +777,8 @@ function AppInner({ isAdmin, onLogout }) {
     const [newMat, setNewMat] = useState({ name: '', unit: '', perBattery: '', stock: '', minStock: '', shopUrl: '' })
     const [editShopId, setEditShopId] = useState(null)
     const [editShopVal, setEditShopVal] = useState('')
+    const [matSearch, setMatSearch] = useState('')
+    const [matPickerOpen, setMatPickerOpen] = useState(false)
     const type = stockType
     if (!type) return wrap(<Center>Немає даних</Center>)
     const mats = type.materials.filter(m => !stockSearch || m.name.toLowerCase().includes(stockSearch.toLowerCase()))
@@ -909,7 +911,35 @@ function AppInner({ isAdmin, onLogout }) {
         ...t, materials: [...t.materials, { id: res.id, name, unit, perBattery: parseFloat(perBattery), stock: parseFloat(stock) || 0, minStock: parseFloat(minStock) || 0, shopUrl: shopUrl || '', photoUrl: null }]
       }))
       setNewMat({ name: '', unit: '', perBattery: '', stock: '', minStock: '', shopUrl: '' })
+      setMatSearch('')
+      setMatPickerOpen(false)
       showToast('✓ Додано ' + name)
+    }
+
+    // Всі унікальні матеріали з ІНШИХ типів яких ще немає в цьому типі
+    const existingNames = new Set(type.materials.map(m => m.name.toLowerCase()))
+    const allOtherMats = []
+    const seen = new Set()
+    batteryTypes.forEach(bt => {
+      if (bt.id === type.id) return
+      bt.materials.forEach(m => {
+        const key = m.name.toLowerCase()
+        if (!seen.has(key)) {
+          seen.add(key)
+          allOtherMats.push(m)
+        }
+      })
+    })
+    // Також матеріали вже в цьому типі (для довідки, щоб не дублювати)
+    const filteredSuggestions = allOtherMats.filter(m =>
+      !existingNames.has(m.name.toLowerCase()) &&
+      (!matSearch || m.name.toLowerCase().includes(matSearch.toLowerCase()))
+    )
+
+    const pickExisting = (m) => {
+      setNewMat({ name: m.name, unit: m.unit, perBattery: String(m.perBattery), stock: '0', minStock: String(m.minStock), shopUrl: m.shopUrl || '' })
+      setMatSearch(m.name)
+      setMatPickerOpen(false)
     }
 
     const addBatteryType = () => {
@@ -976,7 +1006,46 @@ function AppInner({ isAdmin, onLogout }) {
 
       <Card>
         <CardTitle color={G.gn}>+ ДОДАТИ МАТЕРІАЛ</CardTitle>
-        <input placeholder="Назва матеріалу" value={newMat.name} onChange={e => setNewMat(v => ({ ...v, name: e.target.value }))} style={{ marginBottom: 6 }} />
+
+        {/* Пошук / вибір з існуючих матеріалів */}
+        <div style={{ position: 'relative', marginBottom: 6 }}>
+          <input
+            placeholder="🔍 Знайти існуючий або ввести нову назву..."
+            value={matSearch}
+            onChange={e => { setMatSearch(e.target.value); setNewMat(v => ({ ...v, name: e.target.value })); setMatPickerOpen(true) }}
+            onFocus={() => setMatPickerOpen(true)}
+            style={{ marginBottom: 0 }}
+          />
+          {matPickerOpen && filteredSuggestions.length > 0 && (
+            <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50, background: G.card, border: `1px solid ${G.b2}`, borderRadius: 10, maxHeight: 220, overflowY: 'auto', marginTop: 4, boxShadow: '0 8px 24px #0008' }}>
+              <div style={{ padding: '6px 10px', fontSize: 11, color: G.t2, borderBottom: `1px solid ${G.b1}` }}>
+                Матеріали з інших типів — натисніть щоб підставити:
+              </div>
+              {filteredSuggestions.map(m => (
+                <div
+                  key={m.id}
+                  onClick={() => pickExisting(m)}
+                  style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: `1px solid ${G.b1}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                  onMouseEnter={e => e.currentTarget.style.background = G.b1}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                >
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 600 }}>{m.name}</div>
+                    <div style={{ fontSize: 11, color: G.t2 }}>{m.unit} · ×{m.perBattery}/акум · мін:{m.minStock}</div>
+                  </div>
+                  <span style={{ fontSize: 11, color: G.gn, marginLeft: 8 }}>↵ вибрати</span>
+                </div>
+              ))}
+              <div
+                onClick={() => { setMatPickerOpen(false) }}
+                style={{ padding: '8px 12px', fontSize: 11, color: G.t2, cursor: 'pointer', textAlign: 'center' }}
+              >
+                ✕ закрити список
+              </div>
+            </div>
+          )}
+        </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 6 }}>
           <input placeholder="Одиниця (шт, м, г)" value={newMat.unit} onChange={e => setNewMat(v => ({ ...v, unit: e.target.value }))} />
           <input type="number" placeholder="На 1 акум" value={newMat.perBattery} onChange={e => setNewMat(v => ({ ...v, perBattery: e.target.value }))} />
