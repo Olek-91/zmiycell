@@ -27,7 +27,7 @@ html,body{height:100%;height:100dvh;margin:0;background:#0a0f1a url('/logo.jpg')
 `
 
 // ─── Конфіг авторизації ──────────────────────────────────
-const ADMIN_PIN = '1234' // Змініть на свій PIN
+const ADMIN_PIN = '1235' // Змінити на свій PIN
 const AUTH_KEY = 'zc_auth'
 
 // ─── Telegram ────────────────────────────────────────────
