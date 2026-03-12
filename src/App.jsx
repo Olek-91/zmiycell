@@ -402,6 +402,14 @@ function AppInner({ isAdmin, onLogout }) {
   const [stockSearch, setStockSearch] = useState('')
   const [repairSerial, setRepairSerial] = useState('')
   const [repairSearch, setRepairSearch] = useState('')
+  // PageStock стан (піднятий щоб не скидатись при ре-рендері)
+  const [rsVals, setRsVals] = useState({})
+  const [newMat, setNewMat] = useState({ name: '', unit: '', perBattery: '', stock: '', minStock: '', shopUrl: '' })
+  const [editShopId, setEditShopId] = useState(null)
+  const [editShopVal, setEditShopVal] = useState('')
+  const [matSearch, setMatSearch] = useState('')
+  const [matPickerOpen, setMatPickerOpen] = useState(false)
+  const matSearchRef = useRef(null)
 
   // ── Хелпери ──────────────────────────────────────────────
   const showToast = useCallback((msg, type = 'ok') => {
@@ -786,13 +794,7 @@ function AppInner({ isAdmin, onLogout }) {
 
   // ── Склад ─────────────────────────────────────────────────
   const PageStock = () => {
-    const [rsVals, setRsVals] = useState({})
-    const [newMat, setNewMat] = useState({ name: '', unit: '', perBattery: '', stock: '', minStock: '', shopUrl: '' })
-    const [editShopId, setEditShopId] = useState(null)
-    const [editShopVal, setEditShopVal] = useState('')
-    const [matSearch, setMatSearch] = useState('')
-    const [matPickerOpen, setMatPickerOpen] = useState(false)
-    const matSearchRef = useRef(null)
+    // стан піднятий в AppInner: rsVals, newMat, editShopId, editShopVal, matSearch, matPickerOpen, matSearchRef
     const type = stockType
     if (!type) return wrap(<Center>Немає даних</Center>)
     const mats = type.materials.filter(m => !stockSearch || m.name.toLowerCase().includes(stockSearch.toLowerCase()))
@@ -1613,10 +1615,17 @@ function AppInner({ isAdmin, onLogout }) {
   //  LAYOUT
   // ════════════════════════════════════════════════════════
   const pageKeys = NAV.map(n => n[0])
+  // Викликаємо як функції (не як <Component />) щоб React не робив unmount/remount
+  // при кожному ре-рендері AppInner — інакше input втрачає фокус після кожного символу
   const PAGES = {
-    prod: <PageProd />, stock: <PageStock />, repair: <PageRepair />,
-    shopping: <PageShopping />, workers: <PageWorkers />, tools: <PageTools />,
-    log: <PageLog />, manual: <PageManual />
+    prod:     PageProd(),
+    stock:    PageStock(),
+    repair:   PageRepair(),
+    shopping: PageShopping(),
+    workers:  PageWorkers(),
+    tools:    PageTools(),
+    log:      PageLog(),
+    manual:   PageManual(),
   }
 
   const swipeHandlers = useSwipeable({
