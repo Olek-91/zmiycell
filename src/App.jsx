@@ -791,6 +791,7 @@ function AppInner({ isAdmin, onLogout }) {
     const [editShopVal, setEditShopVal] = useState('')
     const [matSearch, setMatSearch] = useState('')
     const [matPickerOpen, setMatPickerOpen] = useState(false)
+    const matSearchRef = useRef(null)
     const type = stockType
     if (!type) return wrap(<Center>Немає даних</Center>)
     const mats = type.materials.filter(m => !stockSearch || m.name.toLowerCase().includes(stockSearch.toLowerCase()))
@@ -1023,10 +1024,12 @@ function AppInner({ isAdmin, onLogout }) {
         {/* Пошук / вибір з існуючих матеріалів */}
         <div style={{ position: 'relative', marginBottom: 6 }}>
           <input
+            ref={matSearchRef}
             placeholder="🔍 Знайти існуючий або ввести нову назву..."
             value={matSearch}
             onChange={e => { setMatSearch(e.target.value); setNewMat(v => ({ ...v, name: e.target.value })); setMatPickerOpen(true) }}
             onFocus={() => setMatPickerOpen(true)}
+            onBlur={() => setTimeout(() => setMatPickerOpen(false), 150)}
             style={{ marginBottom: 0 }}
           />
           {matPickerOpen && filteredSuggestions.length > 0 && (
