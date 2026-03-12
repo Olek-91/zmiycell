@@ -34,9 +34,10 @@ const AUTH_KEY = 'zc_auth'
 // Токени зберігаються в Code.gs, не у фронтенді
 const sendTelegram = async (text) => {
   try {
-    const url = (import.meta.env.VITE_GAS_URL || '').replace('/exec', '/exec')
-    if (!url) return
-    await fetch(`${url}?action=sendTelegram&params=${encodeURIComponent(JSON.stringify([text]))}`)
+    // Відправка через /api/gas проксі (без CORS проблем)
+    // HTML-теги видаляємо — GAS може обрізати params при < >
+    const plain = text.replace(/<[^>]*>/g, '')
+    await gasCall('sendTelegram', [plain])
   } catch (e) { console.warn('TG error:', e) }
 }
 
