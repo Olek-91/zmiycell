@@ -824,9 +824,9 @@ function AppInner({ isAdmin, onLogout }) {
             Матеріали для <b style={{ color:configType.color||G.or }}>{configType.name}</b> — що і скільки витрачається на один акумулятор
           </div>
 
-          {(()=>{const ctms=typeMaterials.filter(tm=>tm.typeId===configTypeId); return ctms.length===0
+          {typeMaterials.filter(tm=>tm.typeId===configTypeId).length===0
             ? <Card><div style={{ color:G.t2, fontSize:13, textAlign:'center', padding:'10px 0' }}>Матеріали не налаштовано — додайте нижче</div></Card>
-            : ctms.map(tm => {
+            : typeMaterials.filter(tm=>tm.typeId===configTypeId).map(tm => {
               const gm = globalMat(tm.matId)
               return <div key={tm.matId} style={{ background:G.card, border:`1px solid ${G.b1}`, borderRadius:12, padding:12, marginBottom:8 }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
