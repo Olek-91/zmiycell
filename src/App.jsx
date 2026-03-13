@@ -297,6 +297,20 @@ function AppInner({ isAdmin, onLogout }) {
 
   const [page, setPage]       = useState('prod')
   const [prodTab, setProdTab] = useState('writeoff')
+  // PageAssembly стан
+  const [asmId, setAsmId]           = useState('')
+  const [asmQty, setAsmQty]         = useState(1)
+  const [asmWorker, setAsmWorker]   = useState('')
+  const [asmDate, setAsmDate]       = useState(todayStr())
+  // Редактор збірок (адмін)
+  const [asmTab, setAsmTab]         = useState('produce') // 'produce' | 'manage'
+  const [editAsmId, setEditAsmId]   = useState(null) // яку збірку редагуємо
+  const [newAsmName, setNewAsmName] = useState('')
+  const [newAsmOutMatId, setNewAsmOutMatId] = useState('')
+  const [newAsmOutQty, setNewAsmOutQty]     = useState('1')
+  const [newAsmNotes, setNewAsmNotes]       = useState('')
+  const [newAcMatId, setNewAcMatId] = useState('')
+  const [newAcQty, setNewAcQty]     = useState('')
   const [repTab, setRepTab]   = useState('new')
   const [stockTab, setStockTab] = useState('materials') // 'materials' | 'types'
 
@@ -305,6 +319,7 @@ function AppInner({ isAdmin, onLogout }) {
   // typeMaterials: [{id, typeId, matId, perBattery, minStock}] — конфігурація типів
   const [materials, setMaterials]         = useState([])
   const [typeMaterials, setTypeMaterials] = useState([])  // [{id,typeId,matId,perBattery,minStock}]
+  const [assemblies, setAssemblies]       = useState([])  // [{id,name,outputMatId,outputQty,unit,notes,components:[]}]
   const [batteryTypes, setBatteryTypes]   = useState([])
   const [workers, setWorkers]         = useState([])
   const [tools, setTools]             = useState([])
@@ -381,6 +396,7 @@ function AppInner({ isAdmin, onLogout }) {
         const mats = data.materials || []
         setMaterials(mats)
         setTypeMaterials(data.typeMaterials || [])
+        setAssemblies(data.assemblies || [])
         setBatteryTypes(data.batteryTypes || [])
         const wks = data.workers || []
         if (!wks.find(w => w.id==='TEAM_SHARED')) wks.unshift({id:'TEAM_SHARED', name:'🤝 СПІЛЬНИЙ СТІЛ (Команда)'})
@@ -395,9 +411,9 @@ function AppInner({ isAdmin, onLogout }) {
           setManualTypeId(data.batteryTypes[0].id)
           setManTypeId(data.batteryTypes[0].id)
         }
-        if (wks.length > 1) { setProdWorker(wks[1].id); setRepWorker(wks[1].id); setManWorkerId(wks[1].id); setToolRepairWorker(wks[1].id) }
-        else if (wks.length > 0) { setProdWorker(wks[0].id); setRepWorker(wks[0].id); setManWorkerId(wks[0].id); setToolRepairWorker(wks[0].id) }
-        if (mats.length) setNewTmMatId(mats[0].id)
+        if (wks.length > 1) { setProdWorker(wks[1].id); setRepWorker(wks[1].id); setManWorkerId(wks[1].id); setToolRepairWorker(wks[1].id); setAsmWorker(wks[1].id) }
+        else if (wks.length > 0) { setProdWorker(wks[0].id); setRepWorker(wks[0].id); setManWorkerId(wks[0].id); setToolRepairWorker(wks[0].id); setAsmWorker(wks[0].id) }
+        if (mats.length) { setNewTmMatId(mats[0].id); setNewAsmOutMatId(mats[0].id); setNewAcMatId(mats[0].id) }
         setSync('ok')
       })
       .catch(() => { setSync('error'); showToast('Не вдалось завантажити дані.','err') })
@@ -541,6 +557,49 @@ function AppInner({ isAdmin, onLogout }) {
     } catch {}
   }
 
+  const doProduceAssembly = () => {
+    const asm = assemblies.find(a => a.id===asmId)
+    const worker = workers.find(w => w.id===asmWorker)
+    if (!asm) return showToast('Оберіть збірку','err')
+    if (!worker) return showToast('Оберіть працівника','err')
+    if (!asmQty || asmQty<=0) return showToast('Введіть кількість','err')
+
+    // Перевіряємо наявність компонентів
+    const shortage = asm.components.find(ac => {
+      const gm = globalMat(ac.matId)
+      return !gm || gm.stock < +(ac.qty * asmQty).toFixed(4)
+    })
+    if (shortage) {
+      const gm = globalMat(shortage.matId)
+      return showToast('Не вистачає: '+(gm?.name||shortage.matId), 'err')
+    }
+
+    const outputAmt = +(asm.outputQty * asmQty).toFixed(4)
+    openConfirm('Підтвердити виготовлення',
+      <div style={{ fontSize:13, color:G.t2, lineHeight:1.8 }}>
+        <b style={{ color:G.or }}>{asm.name}</b><br/>
+        Кількість: <b style={{ color:G.cy }}>{asmQty}</b> партій → {outputAmt} {asm.unit}<br/>
+        Працівник: {worker.name}<br/>
+        {asm.components.map(ac => {
+          const gm = globalMat(ac.matId)
+          return <div key={ac.id}>− {+(ac.qty*asmQty).toFixed(4)} {gm?.unit||''} {gm?.name||''}</div>
+        })}
+      </div>,
+      async () => {
+        closeModal()
+        const entry = { assemblyId:asm.id, qty:asmQty, workerId:worker.id, workerName:worker.name, date:asmDate, datetime:nowStr() }
+        try {
+          await api('produceAssembly', [entry])
+          // Списуємо компоненти локально
+          asm.components.forEach(ac => updateGlobalStock(ac.matId, -(ac.qty*asmQty)))
+          // Додаємо вироблені на склад
+          updateGlobalStock(asm.outputMatId, outputAmt)
+          showToast(`✓ Виготовлено: ${outputAmt} ${asm.unit} → ${asm.name}`)
+        } catch {}
+      }
+    )
+  }
+
   const doSubmitRepair = (repairEntry) => {
     const err = repairEntry.materials.filter(m => m.selected && m.qty>0).find(m => {
       const gm = globalMat(m.matId)
@@ -576,12 +635,71 @@ function AppInner({ isAdmin, onLogout }) {
   const wrap = (children) =>
     <div style={{ padding:'12px 12px 40px', maxWidth:700, margin:'0 auto' }}>{children}</div>
 
+
+  // ── Таб Збірка (всередині ВИРОБНИЦТВО) ───────────────────
+  const AssemblyTab = () => {
+    const curAsm = assemblies.find(a => a.id===asmId)
+
+    if (assemblies.length===0) return (
+      <Card>
+        <div style={{ color:G.t2, fontSize:13, textAlign:'center', padding:'10px 0' }}>
+          Збірки не налаштовано.{isAdmin ? ' Перейдіть на СКЛАД → ⚙️ ЗБІРКИ.' : ' Зверніться до адміна.'}
+        </div>
+      </Card>
+    )
+
+    return <>
+      <Card>
+        <CardTitle color='#a78bfa'>⚙️ ВИГОТОВИТИ ЗБІРКУ</CardTitle>
+        <FormRow label="ЗБІРКА">
+          <select value={asmId} onChange={e => setAsmId(e.target.value)}>
+            <option value="">— оберіть збірку —</option>
+            {assemblies.map(a => {
+              const gm = globalMat(a.outputMatId)
+              return <option key={a.id} value={a.id}>{a.name} → {a.outputQty} {gm?.unit||a.unit} {gm?.name||''}</option>
+            })}
+          </select>
+        </FormRow>
+        <FormRow label="КІЛЬКІСТЬ ПАРТІЙ">
+          <input type="number" min="1" value={asmQty} onChange={e => setAsmQty(parseInt(e.target.value)||1)} />
+        </FormRow>
+        <FormRow label="ПРАЦІВНИК">
+          <select value={asmWorker} onChange={e => setAsmWorker(e.target.value)}>
+            {workers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+          </select>
+        </FormRow>
+        <FormRow label="ДАТА"><input value={asmDate} onChange={e => setAsmDate(e.target.value)} /></FormRow>
+
+        {curAsm && curAsm.components.length>0 && (
+          <div style={{ background:G.b1, borderRadius:8, padding:'10px 12px', marginBottom:10 }}>
+            <div style={{ fontSize:11, color:G.t2, marginBottom:6, fontWeight:700 }}>КОМПОНЕНТИ (на {asmQty} партій)</div>
+            {curAsm.components.map(ac => {
+              const gm  = globalMat(ac.matId)
+              const need = +(ac.qty * asmQty).toFixed(4)
+              const ok   = gm && gm.stock >= need
+              return <div key={ac.id} style={{ display:'flex', justifyContent:'space-between', fontSize:13, padding:'3px 0', color:ok?G.t1:G.rd }}>
+                <span>{gm?.name||ac.matId}</span>
+                <span style={{ fontWeight:600 }}>{need} {gm?.unit||''} <span style={{ color:ok?G.t2:G.rd, fontSize:11 }}>(є: {gm?.stock??'?'})</span></span>
+              </div>
+            })}
+            <div style={{ borderTop:`1px solid ${G.b2}`, marginTop:8, paddingTop:8, display:'flex', justifyContent:'space-between', fontSize:13 }}>
+              <span style={{ color:G.t2 }}>Вийде на склад:</span>
+              <span style={{ color:'#a78bfa', fontWeight:700 }}>+{+(curAsm.outputQty*asmQty).toFixed(4)} {globalMat(curAsm.outputMatId)?.unit||curAsm.unit} {globalMat(curAsm.outputMatId)?.name||''}</span>
+            </div>
+          </div>
+        )}
+
+        <SubmitBtn onClick={doProduceAssembly} color='#a78bfa'>⚙️ ВИГОТОВИТИ</SubmitBtn>
+      </Card>
+    </>
+  }
+
   // ── Виробництво ───────────────────────────────────────────
   const PageProd = () => {
     const consumed = prodType ? buildConsumed(prodType, prodWorker, prodQty) : []
     const serials  = Array.from({length:prodQty}, (_,i) => prodSerials[i]||'')
     return wrap(<>
-      <SubTabs tabs={[['writeoff','🔋 СПИСАННЯ'],['prep','📦 ЗАГОТОВКА']]} active={prodTab} onChange={setProdTab} />
+      <SubTabs tabs={[['writeoff','🔋 СПИСАННЯ'],['prep','📦 ЗАГОТОВКА'],['assembly','⚙️ ЗБІРКА']]} active={prodTab} onChange={setProdTab} />
       {prodTab==='writeoff' && <>
         <TypeTabs types={batteryTypes} active={prodTypeId} onSelect={id => {setProdTypeId(id);setProdSerials([])}} />
         <Card>
@@ -624,6 +742,7 @@ function AppInner({ isAdmin, onLogout }) {
         <div style={{ height:16 }} />
       </>}
       {prodTab==='prep' && <PrepTab batteryTypes={batteryTypes} workers={workers} materials={materials} prepItems={prepItems} onIssue={doIssuePrep} onReturn={doReturnPrep} />}
+      {prodTab==='assembly' && <AssemblyTab />}
     </>)
   }
 
@@ -872,9 +991,124 @@ function AppInner({ isAdmin, onLogout }) {
       </>
     }
 
+
+    // ── Підтаб: Збірки ────────────────────────────────────
+    const TabAssemblies = () => {
+      if (!isAdmin) return <div style={{ color:G.t2, fontSize:13, padding:20, textAlign:'center' }}>Доступно тільки адміну</div>
+
+      const curEditAsm = assemblies.find(a => a.id===editAsmId)
+
+      const createAsm = async () => {
+        if (!newAsmName||!newAsmOutMatId||!newAsmOutQty) return showToast("Назва, матеріал і кількість — обов'язкові",'err')
+        const gm = globalMat(newAsmOutMatId)
+        const res = await api('addAssembly', [newAsmName, newAsmOutMatId, parseFloat(newAsmOutQty)||1, gm?.unit||'', newAsmNotes])
+        const na = {id:res.id, name:newAsmName, outputMatId:newAsmOutMatId, outputQty:parseFloat(newAsmOutQty)||1, unit:gm?.unit||'', notes:newAsmNotes, components:[]}
+        setAssemblies(prev => [...prev, na])
+        setEditAsmId(res.id)
+        setNewAsmName(''); setNewAsmNotes('')
+        showToast('✓ Збірку створено: '+newAsmName)
+      }
+
+      const deleteAsm = (a) => openConfirm('Видалити збірку?',
+        <span>Видалить <b style={{ color:G.rd }}>{a.name}</b> і всі компоненти</span>,
+        async () => {
+          closeModal()
+          await api('deleteAssembly', [a.id])
+          setAssemblies(prev => prev.filter(ax => ax.id!==a.id))
+          if (editAsmId===a.id) setEditAsmId(null)
+          showToast('✓ Видалено')
+        })
+
+      const addComp = async () => {
+        if (!editAsmId||!newAcMatId||!newAcQty) return showToast("Оберіть матеріал і кількість",'err')
+        const res = await api('addAssemblyComponent', [editAsmId, newAcMatId, parseFloat(newAcQty)||0])
+        if (!res.ok) return showToast(res.error,'err')
+        const nc = {id:res.id, assemblyId:editAsmId, matId:newAcMatId, qty:parseFloat(newAcQty)||0}
+        setAssemblies(prev => prev.map(a => a.id!==editAsmId ? a : {...a, components:[...a.components, nc]}))
+        setNewAcQty('')
+        showToast('✓ Компонент додано')
+      }
+
+      const removeComp = (asmId, ac) => openConfirm('Видалити компонент?', null, async () => {
+        closeModal()
+        await api('removeAssemblyComponent', [ac.id])
+        setAssemblies(prev => prev.map(a => a.id!==asmId ? a : {...a, components:a.components.filter(x => x.id!==ac.id)}))
+        showToast('✓ Видалено')
+      })
+
+      const editCompQty = (asmId, ac) => openInput('Нова кількість:', String(ac.qty), String(ac.qty), async (val) => {
+        closeModal()
+        const qty = parseFloat(val)||0
+        await api('updateAssemblyComponent', [ac.id, qty])
+        setAssemblies(prev => prev.map(a => a.id!==asmId ? a : {...a, components:a.components.map(x => x.id!==ac.id ? x : {...x, qty})}))
+        showToast('✓ Оновлено')
+      })
+
+      return <>
+        {/* Список збірок */}
+        {assemblies.map(a => {
+          const gm = globalMat(a.outputMatId)
+          const isEditing = editAsmId===a.id
+          return <div key={a.id} style={{ background:G.card, border:`1px solid ${isEditing?'#7c3aed':G.b1}`, borderRadius:12, padding:12, marginBottom:8 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:6 }}>
+              <div>
+                <div style={{ fontSize:14, fontWeight:700, color:'#a78bfa' }}>{a.name}</div>
+                <div style={{ fontSize:12, color:G.t2, marginTop:2 }}>
+                  → <b style={{ color:G.cy }}>{a.outputQty}</b> {gm?.unit||a.unit} <b>{gm?.name||'?'}</b> на складі
+                </div>
+              </div>
+              <div style={{ display:'flex', gap:4 }}>
+                <button onClick={() => setEditAsmId(isEditing?null:a.id)} style={{ background:isEditing?'#4c1d95':G.b1, border:`1px solid ${G.b2}`, color:'#a78bfa', padding:'4px 10px', borderRadius:6, fontSize:11, cursor:'pointer' }}>
+                  {isEditing?'✓ готово':'✎ компоненти'}
+                </button>
+                <button onClick={() => deleteAsm(a)} style={{ background:'#450a0a', border:'none', color:G.rd, padding:'4px 8px', borderRadius:6, fontSize:11, cursor:'pointer' }}>✕</button>
+              </div>
+            </div>
+
+            {/* Компоненти */}
+            {a.components.length>0 && <div style={{ background:G.b1, borderRadius:8, padding:'8px 10px', marginBottom:isEditing?8:0 }}>
+              {a.components.map(ac => {
+                const cgm = globalMat(ac.matId)
+                return <div key={ac.id} style={{ display:'flex', alignItems:'center', gap:6, padding:'3px 0', fontSize:13 }}>
+                  <span style={{ flex:1, color:G.t1 }}>{cgm?.name||ac.matId}</span>
+                  <span onClick={() => isEditing && editCompQty(a.id, ac)} style={{ color:G.or, fontWeight:600, cursor:isEditing?'pointer':'default', background:G.card2, borderRadius:6, padding:'2px 8px' }}>×{ac.qty} {cgm?.unit||''}</span>
+                  {isEditing && <button onClick={() => removeComp(a.id, ac)} style={{ background:'none', border:'none', color:G.rd, fontSize:12, cursor:'pointer', padding:'0 4px' }}>✕</button>}
+                </div>
+              })}
+            </div>}
+
+            {/* Форма додавання компонента */}
+            {isEditing && <div style={{ display:'flex', gap:6, marginTop:4 }}>
+              <select value={newAcMatId} onChange={e => setNewAcMatId(e.target.value)} style={{ flex:2 }}>
+                {materials.map(m => <option key={m.id} value={m.id}>{m.name} ({m.stock} {m.unit})</option>)}
+              </select>
+              <input type="number" placeholder="кількість" value={newAcQty} onChange={e => setNewAcQty(e.target.value)} style={{ width:80 }} />
+              <button onClick={addComp} style={{ padding:'6px 10px', background:'#4c1d95', color:'#a78bfa', border:'none', borderRadius:8, fontSize:13, cursor:'pointer', fontWeight:700 }}>+</button>
+            </div>}
+          </div>
+        })}
+
+        {/* Форма нової збірки */}
+        <Card>
+          <CardTitle color='#a78bfa'>+ НОВА ЗБІРКА</CardTitle>
+          <FormRow label="НАЗВА ЗБІРКИ"><input placeholder="напр. Обжатий кабель XT90" value={newAsmName} onChange={e => setNewAsmName(e.target.value)} /></FormRow>
+          <FormRow label="РЕЗУЛЬТАТ (матеріал на складі)">
+            <select value={newAsmOutMatId} onChange={e => setNewAsmOutMatId(e.target.value)}>
+              {materials.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          </FormRow>
+          <FormRow label="КІЛЬКІСТЬ НА 1 ПАРТІЮ">
+            <input type="number" placeholder="1" value={newAsmOutQty} onChange={e => setNewAsmOutQty(e.target.value)} />
+          </FormRow>
+          <FormRow label="НОТАТКА (необов'язково)"><input placeholder="опис" value={newAsmNotes} onChange={e => setNewAsmNotes(e.target.value)} /></FormRow>
+          <SubmitBtn onClick={createAsm} color='#a78bfa'>+ СТВОРИТИ ЗБІРКУ</SubmitBtn>
+        </Card>
+      </>
+    }
+
     return wrap(<>
-      <SubTabs tabs={[['materials','📦 МАТЕРІАЛИ'],['types','🔋 ТИПИ БАТАРЕЙ']]} active={stockTab} onChange={setStockTab} />
-      {stockTab==='materials' ? TabMaterials() : TabTypes()}
+      <SubTabs tabs={[['materials','📦 МАТЕРІАЛИ'],['types','🔋 ТИПИ БАТАРЕЙ'],['assemblies','⚙️ ЗБІРКИ']]} active={stockTab} onChange={setStockTab} />
+      {stockTab==='materials' ? TabMaterials() : stockTab==='types' ? TabTypes() : TabAssemblies()}
     </>)
   }
 
