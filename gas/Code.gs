@@ -1261,7 +1261,9 @@ function repairMaterialIds() {
       idMap[oldId] = newId
       matData[i][0] = newId
     }
-    matSh.getRange(2, 1, matData.length - 1, matData[0].length).setValues(matData.slice(1))
+    if (matData.length > 1) {
+      matSh.getRange(2, 1, matData.length - 1, matData[0].length).setValues(matData.slice(1))
+    }
 
     // Update TypeMaterials
     var tmSh = ss.getSheetByName(SHEET.TYPE_MATS)
@@ -1271,7 +1273,9 @@ function repairMaterialIds() {
         var old = String(tmData[r][2] || '')
         if (idMap[old]) tmData[r][2] = idMap[old]
       }
-      tmSh.getRange(2,1,tmData.length-1,tmData[0].length).setValues(tmData.slice(1))
+      if (tmData.length > 1) {
+        tmSh.getRange(2,1,tmData.length-1,tmData[0].length).setValues(tmData.slice(1))
+      }
     }
 
     // Update AssemblyComponents
@@ -1282,7 +1286,9 @@ function repairMaterialIds() {
         var old2 = String(acData[r2][2] || '')
         if (idMap[old2]) acData[r2][2] = idMap[old2]
       }
-      acSh.getRange(2,1,acData.length-1,acData[0].length).setValues(acData.slice(1))
+      if (acData.length > 1) {
+        acSh.getRange(2,1,acData.length-1,acData[0].length).setValues(acData.slice(1))
+      }
     }
 
     // Update PrepItems
@@ -1294,7 +1300,9 @@ function repairMaterialIds() {
         var old3 = String(pData[r3][4] || '')
         if (idMap[old3]) pData[r3][4] = idMap[old3]
       }
-      pSh.getRange(2,1,pData.length-1,pData[0].length).setValues(pData.slice(1))
+      if (pData.length > 1) {
+        pSh.getRange(2,1,pData.length-1,pData[0].length).setValues(pData.slice(1))
+      }
     }
 
     // Update Log consumedJson
@@ -1315,7 +1323,9 @@ function repairMaterialIds() {
           if (changed) lData[r4][8] = JSON.stringify(arr)
         }
       }
-      logSh.getRange(2,1,lData.length-1,lData[0].length).setValues(lData.slice(1))
+      if (lData.length > 1) {
+        logSh.getRange(2,1,lData.length-1,lData[0].length).setValues(lData.slice(1))
+      }
     }
 
     return { ok:true, message:'Матеріали перестворені: ' + (matData.length-1) }
