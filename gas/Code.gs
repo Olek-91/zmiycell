@@ -1,4 +1,4 @@
-﻿
+
 // ══════════════════════════════════════════════════════════════
 //  ZmiyCell — Google Apps Script  (Code.gs)
 //  Vercel + проксі (api/gas.js)
@@ -18,6 +18,7 @@ var SHEET = {
   ASSEM_COMP:'AssemblyComponents',
   WORKERS:   'Workers',
   TOOLS:     'Tools',
+  TOOL_LOG:  'ToolLog',
   LOG:       'Log',
   REPAIR:    'RepairLog',
   PREP:      'PrepItems',
@@ -81,7 +82,6 @@ function doGet(e) {
 var ACTIONS = {
   loadAll:                loadAll,
   initSheets:             initSheets,
-  migrateToNewSchema:     migrateToNewSchema,
 
   // Матеріали (глобальний склад)
   addMaterial:            addMaterial,
@@ -100,7 +100,9 @@ var ACTIONS = {
   addPrepItemsBatch:      addPrepItemsBatch,
   updatePrepField:        updatePrepField,
   returnPrep:             returnPrep,
+  issueConsumable:        issueConsumable,
   addRepair:              addRepair,
+  updateRepairStatus:     updateRepairStatus,
   returnRepairMaterials:  returnRepairMaterials,
   deleteRepair:           deleteRepair,
 
@@ -112,12 +114,12 @@ var ACTIONS = {
   saveWorker:             saveWorker,
   deleteWorker:           deleteWorker,
   addPayment:             addPayment,
-  repairMaterialIds:      repairMaterialIds,
 
   // Інструменти
   saveTool:               saveTool,
   deleteTool:             deleteTool,
   reportToolRepair:       reportToolRepair,
+  logToolEvent:           logToolEvent,
 
   // Збірки (напівфабрикати)
   addAssembly:            addAssembly,
@@ -172,7 +174,7 @@ function initSheets() {
 
   // Збірки (напівфабрикати)
   ensureSheet(ss, SHEET.ASSEMBLIES,
-    ['id', 'name', 'outputMatId', 'outputQty', 'unit', 'notes'],
+    ['id', 'name', 'outputMatId', 'outputQty', 'unit', 'notes', 'manual'],
     []
   )
   ensureSheet(ss, SHEET.ASSEM_COMP,
@@ -200,6 +202,11 @@ function initSheets() {
     ]
   )
 
+  ensureSheet(ss, SHEET.TOOL_LOG,
+    ['id','toolId','toolName','date','datetime','event','workerName','note'],
+    []
+  )
+
   ensureSheet(ss, SHEET.LOG,
     ['id','datetime','date','typeId','typeName','workerName','count','serials','consumedJson','kind','repairNote'],
     []
@@ -221,109 +228,6 @@ function initSheets() {
   )
 
   return { ok: true, message: 'Ініціалізацію завершено' }
-}
-
-// ══════════════════════════════════════════════════════════════
-//  МІГРАЦІЯ зі старої схеми на нову
-//  Запустити ОДИН РАЗ вручну після оновлення коду
-// ══════════════════════════════════════════════════════════════
-function migrateToNewSchema() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet()
-  var matSh = ss.getSheetByName(SHEET.MATERIALS)
-  if (!matSh) return { ok: false, error: 'Таблиця Materials не знайдена' }
-
-  var data = matSh.getDataRange().getValues()
-  var headers = data[0]
-
-  // Перевіряємо чи стара схема (є колонка typeId)
-  var typeIdCol = headers.indexOf('typeId')
-  if (typeIdCol < 0) return { ok: true, message: 'Вже нова схема, міграція не потрібна' }
-
-  // Читаємо всі старі рядки
-  var oldMats = []
-  for (var i = 1; i < data.length; i++) {
-    var row = data[i]
-    var hasVal = false
-    for (var c = 0; c < row.length; c++) { if (row[c] !== '') { hasVal = true; break } }
-    if (!hasVal) continue
-    var obj = {}
-    for (var j = 0; j < headers.length; j++) obj[headers[j]] = row[j]
-    oldMats.push(obj)
-  }
-
-  // Збираємо унікальні матеріали по назві
-  var uniqueByName = {}
-  oldMats.forEach(function(m) {
-    var name = String(m.name || '').trim()
-    if (!name) return
-    if (!uniqueByName[name]) {
-      uniqueByName[name] = {
-        name:      name,
-        unit:      m.unit      || '',
-        stock:     num(m.stock),
-        photoUrl:  m.photoUrl  || '',
-        isOrdered: m.isOrdered || false,
-        shopUrl:   m.shopUrl   || '',
-        minStock:  num(m.minStock),
-      }
-    } else {
-      // Беремо максимум залишку
-      uniqueByName[name].stock = Math.max(uniqueByName[name].stock, num(m.stock))
-    }
-  })
-
-  // Перезаписуємо Materials з новою схемою
-  var newHeaders = ['id', 'name', 'unit', 'stock', 'photoUrl', 'isOrdered', 'shopUrl', 'minStock']
-  matSh.clearContents()
-  matSh.getRange(1, 1, 1, newHeaders.length).setValues([newHeaders])
-
-  var newRows = []
-  var nameToId = {}
-  var keys = Object.keys(uniqueByName)
-  for (var k = 0; k < keys.length; k++) {
-    var name = keys[k]
-    var m = uniqueByName[name]
-    var id = 'mat_' + (Date.now() + k)
-    nameToId[name] = id
-    newRows.push([id, m.name, m.unit, m.stock, m.photoUrl, m.isOrdered, m.shopUrl, num(m.minStock)])
-  }
-
-  if (newRows.length) {
-    matSh.getRange(2, 1, newRows.length, newHeaders.length).setValues(newRows)
-  }
-
-  // Створюємо TypeMaterials якщо нема
-  var tmSh = ss.getSheetByName(SHEET.TYPE_MATS)
-  if (!tmSh) {
-    tmSh = ss.insertSheet(SHEET.TYPE_MATS)
-    tmSh.getRange(1, 1, 1, 5).setValues([['id', 'typeId', 'matId', 'perBattery', 'minStock']])
-  }
-
-  // Заповнюємо TypeMaterials
-  var tmRows = []
-  var seen = {}
-  oldMats.forEach(function(m) {
-    var name   = String(m.name   || '').trim()
-    var typeId = String(m.typeId || '').trim()
-    if (!name || !typeId) return
-    var key = typeId + '|' + name
-    if (seen[key]) return
-    seen[key] = true
-    var matId = nameToId[name]
-    if (!matId) return
-    var id = 'tm_' + Date.now() + '_' + tmRows.length
-    tmRows.push([id, typeId, matId, num(m.perBattery), num(m.minStock)])
-  })
-
-  if (tmRows.length) {
-    var lastRow = tmSh.getLastRow()
-    tmSh.getRange(lastRow + 1, 1, tmRows.length, 5).setValues(tmRows)
-  }
-
-  return {
-    ok: true,
-    message: 'Міграцію завершено. Матеріалів: ' + newRows.length + ', зв\'язків: ' + tmRows.length
-  }
 }
 
 function ensureSheet(ss, name, headers, dataRows) {
@@ -364,6 +268,7 @@ function loadAll() {
   var rRows   = rows(ss, SHEET.REPAIR)
   var pRows   = rows(ss, SHEET.PREP)
   var payRows = rows(ss, SHEET.PAYMENTS)
+  var tlRows  = rows(ss, SHEET.TOOL_LOG)
 
   var materials = matRows.map(function(m) {
     return {
@@ -440,6 +345,7 @@ function loadAll() {
       outputQty:   num(a.outputQty),
       unit:        a.unit || '',
       notes:       a.notes || '',
+      manual:      a.manual || '',
       components:  acRows
         .filter(function(ac) { return ac.assemblyId === a.id })
         .map(function(ac) { return { id:ac.id, assemblyId:ac.assemblyId, matId:ac.matId, qty:num(ac.qty) } }),
@@ -530,6 +436,19 @@ function loadAll() {
         datetime: r.datetime,
       }
     }).reverse(),
+
+    toolLog: tlRows.map(function(r) {
+      return {
+        id: r.id,
+        toolId: r.toolId,
+        toolName: r.toolName,
+        date: r.date,
+        datetime: r.datetime,
+        event: r.event,
+        workerName: r.workerName,
+        note: r.note || '',
+      }
+    }).reverse(),
   }
 }
 
@@ -537,40 +456,17 @@ function loadAll() {
 //  МАТЕРІАЛИ (глобальний склад)
 //  Колонки: 1:id 2:name 3:unit 4:stock 5:photoUrl 6:isOrdered 7:shopUrl 8:minStock
 // ══════════════════════════════════════════════════════════════
-function addMaterial(a, b, c, d, e, f, g) {
+function addMaterial(name, unit, stock, minStock, shopUrl, photoUrl) {
   var ss = SpreadsheetApp.getActiveSpreadsheet()
-  var sh = ss.getSheetByName(SHEET.MATERIALS)
+  var sh = ensureSheet(ss, SHEET.MATERIALS, ['id', 'name', 'unit', 'stock', 'photoUrl', 'isOrdered', 'shopUrl', 'minStock'], [])
   ensureColumn(sh, 'minStock')
 
-  // Backward compatible signature:
-  // addMaterial(typeId, name, unit, perBattery, stock, minStock, shopUrl)
-  var isOldSig = isBatteryTypeId(a)
-  if (isOldSig && (g !== undefined || f !== undefined || e !== undefined)) {
-    var typeId = a
-    var name = b
-    var unit = c
-    var perBattery = num(d)
-    var stock = num(e)
-    var minStock = num(f)
-    var shopUrl = g || ''
-
-    var matId = findMaterialIdByName(name)
-    if (!matId) {
-      matId = 'mat_' + Date.now()
-      sh.appendRow([matId, name, unit, stock, '', false, shopUrl, minStock])
-    }
-
-    var tmRes = ensureTypeMaterial(typeId, matId, perBattery, minStock)
-    return { ok: true, id: matId, typeMatId: tmRes.id }
-  }
-
-  // New signature: addMaterial(name, unit, stock, minStock, shopUrl, photoUrl)
-  var nameNew = a
-  var unitNew = b
-  var stockNew = num(c)
-  var minStockNew = num(d)
-  var shopUrlNew = e || ''
-  var photoUrlNew = f || ''
+  var nameNew = name
+  var unitNew = unit
+  var stockNew = num(stock)
+  var minStockNew = num(minStock)
+  var shopUrlNew = shopUrl || ''
+  var photoUrlNew = photoUrl || ''
   var id = 'mat_' + Date.now()
   sh.appendRow([id, nameNew, unitNew, stockNew, photoUrlNew, false, shopUrlNew, minStockNew])
   return { ok: true, id: id }
@@ -1001,10 +897,10 @@ function addRepair(entry) {
     ss.getSheetByName(SHEET.REPAIR).appendRow([
       entry.id, entry.datetime, entry.date,
       entry.serial, entry.typeName, entry.typeId,
-      entry.originalWorker, entry.repairWorker,
+      entry.originalWorker, entry.repairWorker || '',
       entry.note || '',
-      JSON.stringify(entry.materials),
-      'completed',
+      JSON.stringify(entry.materials || []),
+      entry.status || 'completed',
     ])
 
     ss.getSheetByName(SHEET.LOG).appendRow([
@@ -1122,7 +1018,7 @@ function reportToolRepair(toolId, repairNote, repairDate, workerName) {
 // ══════════════════════════════════════════════════════════════
 function saveWorker(worker) {
   var ss   = SpreadsheetApp.getActiveSpreadsheet()
-  var sh   = ss.getSheetByName(SHEET.WORKERS)
+  var sh   = ensureSheet(ss, SHEET.WORKERS, ['id', 'name'], [])
   var data = sh.getDataRange().getValues()
   for (var i = 1; i < data.length; i++) {
     if (data[i][0] === worker.id) {
@@ -1162,7 +1058,7 @@ function addPayment(entry) {
 // ══════════════════════════════════════════════════════════════
 function saveTool(tool) {
   var ss   = SpreadsheetApp.getActiveSpreadsheet()
-  var sh   = ss.getSheetByName(SHEET.TOOLS)
+  var sh   = ensureSheet(ss, SHEET.TOOLS, ['id', 'name', 'category', 'count', 'working', 'serial', 'notes', 'repairNote', 'repairDate'], [])
   var data = sh.getDataRange().getValues()
   var row  = [
     tool.id, tool.name, tool.category,
@@ -1212,6 +1108,7 @@ function rows(ss, name) {
 function deleteRowWhere(sheetName, predicate) {
   var ss   = SpreadsheetApp.getActiveSpreadsheet()
   var sh   = ss.getSheetByName(sheetName)
+  if (!sh) return { ok: true }
   var data = sh.getDataRange().getValues()
   for (var i = 1; i < data.length; i++) {
     if (predicate(data[i])) {
@@ -1225,6 +1122,7 @@ function deleteRowWhere(sheetName, predicate) {
 function findMaterialIdByName(name) {
   var ss = SpreadsheetApp.getActiveSpreadsheet()
   var sh = ss.getSheetByName(SHEET.MATERIALS)
+  if (!sh) return null
   var data = sh.getDataRange().getValues()
   var target = String(name || '').trim().toLowerCase()
   for (var i = 1; i < data.length; i++) {
@@ -1242,94 +1140,6 @@ function isBatteryTypeId(id) {
     if (String(data[i][0]) === String(id)) return true
   }
   return false
-}
-
-function repairMaterialIds() {
-  return withLock(function() {
-    var ss = SpreadsheetApp.getActiveSpreadsheet()
-    var matSh = ss.getSheetByName(SHEET.MATERIALS)
-    if (!matSh) return { ok:false, error:'Materials не знайдено' }
-    ensureColumn(matSh, 'minStock')
-
-    var matData = matSh.getDataRange().getValues()
-    if (matData.length < 2) return { ok:true, message:'Немає рядків' }
-
-    var idMap = {}
-    for (var i = 1; i < matData.length; i++) {
-      var oldId = String(matData[i][0] || '')
-      var newId = 'mat_' + Date.now() + '_' + i
-      idMap[oldId] = newId
-      matData[i][0] = newId
-    }
-    if (matData.length > 1) {
-      matSh.getRange(2, 1, matData.length - 1, matData[0].length).setValues(matData.slice(1))
-    }
-
-    // Update TypeMaterials
-    var tmSh = ss.getSheetByName(SHEET.TYPE_MATS)
-    if (tmSh) {
-      var tmData = tmSh.getDataRange().getValues()
-      for (var r = 1; r < tmData.length; r++) {
-        var old = String(tmData[r][2] || '')
-        if (idMap[old]) tmData[r][2] = idMap[old]
-      }
-      if (tmData.length > 1) {
-        tmSh.getRange(2,1,tmData.length-1,tmData[0].length).setValues(tmData.slice(1))
-      }
-    }
-
-    // Update AssemblyComponents
-    var acSh = ss.getSheetByName(SHEET.ASSEM_COMP)
-    if (acSh) {
-      var acData = acSh.getDataRange().getValues()
-      for (var r2 = 1; r2 < acData.length; r2++) {
-        var old2 = String(acData[r2][2] || '')
-        if (idMap[old2]) acData[r2][2] = idMap[old2]
-      }
-      if (acData.length > 1) {
-        acSh.getRange(2,1,acData.length-1,acData[0].length).setValues(acData.slice(1))
-      }
-    }
-
-    // Update PrepItems
-    var pSh = ss.getSheetByName(SHEET.PREP)
-    if (pSh) {
-      ensureColumn(pSh, 'scope')
-      var pData = pSh.getDataRange().getValues()
-      for (var r3 = 1; r3 < pData.length; r3++) {
-        var old3 = String(pData[r3][4] || '')
-        if (idMap[old3]) pData[r3][4] = idMap[old3]
-      }
-      if (pData.length > 1) {
-        pSh.getRange(2,1,pData.length-1,pData[0].length).setValues(pData.slice(1))
-      }
-    }
-
-    // Update Log consumedJson
-    var logSh = ss.getSheetByName(SHEET.LOG)
-    if (logSh) {
-      var lData = logSh.getDataRange().getValues()
-      for (var r4 = 1; r4 < lData.length; r4++) {
-        var cjson = lData[r4][8]
-        var arr = json(cjson, null)
-        if (arr && arr.length) {
-          var changed = false
-          arr.forEach(function(c) {
-            if (c.matId && idMap[String(c.matId)]) {
-              c.matId = idMap[String(c.matId)]
-              changed = true
-            }
-          })
-          if (changed) lData[r4][8] = JSON.stringify(arr)
-        }
-      }
-      if (lData.length > 1) {
-        logSh.getRange(2,1,lData.length-1,lData[0].length).setValues(lData.slice(1))
-      }
-    }
-
-    return { ok:true, message:'Матеріали перестворені: ' + (matData.length-1) }
-  })
 }
 
 function num(v)       { return parseFloat(v) || 0 }
@@ -1385,20 +1195,20 @@ function buildDefaultMaterials() {
 //  Assemblies:        id, name, outputMatId, outputQty, unit, notes
 //  AssemblyComponents: id, assemblyId, matId, qty
 // ══════════════════════════════════════════════════════════════
-function addAssembly(name, outputMatId, outputQty, unit, notes) {
+function addAssembly(name, outputMatId, outputQty, unit, notes, manual) {
   var ss = SpreadsheetApp.getActiveSpreadsheet()
   var sh = ss.getSheetByName(SHEET.ASSEMBLIES)
   if (!sh) {
     sh = ss.insertSheet(SHEET.ASSEMBLIES)
-    sh.getRange(1,1,1,6).setValues([['id','name','outputMatId','outputQty','unit','notes']])
+    sh.getRange(1,1,1,7).setValues([['id','name','outputMatId','outputQty','unit','notes','manual']])
   }
   var id = 'asm_' + Date.now()
-  sh.appendRow([id, name, outputMatId, num(outputQty), unit||'', notes||''])
+  sh.appendRow([id, name, outputMatId, num(outputQty), unit||'', notes||'', manual||''])
   return { ok:true, id:id }
 }
 
 function updateAssemblyField(asmId, field, value) {
-  var colMap = { name:2, outputMatId:3, outputQty:4, unit:5, notes:6 }
+  var colMap = { name:2, outputMatId:3, outputQty:4, unit:5, notes:6, manual:7 }
   var col = colMap[field]
   if (!col) return { ok:false, error:'Невідоме поле: '+field }
   var ss   = SpreadsheetApp.getActiveSpreadsheet()
@@ -1553,3 +1363,106 @@ function produceAssembly(entry) {
     return { ok:true, outputAmt:outputAmt, consumed:consumed }
   })
 }
+
+function logToolEvent(toolId, toolName, date, datetime, event, workerName, note) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet()
+  var sh = ensureSheet(ss, SHEET.TOOL_LOG, ['id','toolId','toolName','date','datetime','event','workerName','note'], [])
+  sh.appendRow(['tl_'+Date.now(), toolId, toolName, date, datetime, event, workerName, note])
+  return { ok: true }
+}
+
+function issueConsumable(workerId, workerName, matId, matName, qty, unit, date, datetime) {
+  return withLock(function() {
+    var ss = SpreadsheetApp.getActiveSpreadsheet()
+    var logSh = ensureSheet(ss, SHEET.LOG, ['id','datetime','date','typeId','typeName','workerName','count','serials','consumedJson','kind','repairNote'], [])
+    
+    // Списуємо матеріал
+    var res = updateMaterialStock(matId, -num(qty))
+    if (!res.ok) return res
+    
+    // Записуємо в основний лог
+    var consumed = [{ matId: matId, name: matName, unit: unit, amount: num(qty) }]
+    logSh.appendRow(['log_'+Date.now(), datetime, date, 'ALL', 'Розхідні матеріали', workerName, 0, '', JSON.stringify(consumed), 'consumable', ''])
+    
+    return { ok: true }
+  })
+}
+
+function updateRepairStatus(repairId, status, dateCompleted, workerName, materialsJson, noteAppend) {
+  return withLock(function() {
+    var ss = SpreadsheetApp.getActiveSpreadsheet()
+    var repSh = ss.getSheetByName(SHEET.REPAIR)
+    if (!repSh) return { ok: false, error: 'Sheet not found' }
+    var data = repSh.getDataRange().getValues()
+    var foundIndex = -1
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(repairId)) {
+        foundIndex = i
+        break
+      }
+    }
+    if (foundIndex < 0) return { ok: false, error: 'Repair not found' }
+    
+    var row = data[foundIndex]
+    
+    // Deduct materials if completing
+    var consumed = []
+    if (status === 'completed' && materialsJson) {
+      var mats = json(materialsJson, [])
+      var matSh = ss.getSheetByName(SHEET.MATERIALS)
+      var matData = matSh.getDataRange().getValues()
+      mats.forEach(function(m) {
+        if (!m.selected || !m.qty) return
+        for (var j = 1; j < matData.length; j++) {
+          if (String(matData[j][0]) === String(m.matId)) {
+            var cur = +matData[j][3] || 0
+            var nv  = Math.max(0, +(cur - m.qty).toFixed(4))
+            matSh.getRange(j + 1, 4).setValue(nv)
+            matData[j][3] = nv
+            consumed.push({ matId: m.matId, name: m.matName, unit: m.unit, amount: m.qty })
+            break
+          }
+        }
+      })
+      // Write logic to replace existing materials json in the repair sheet
+      var curMats = json(row[9], [])
+      var allMats = curMats.concat(mats.filter(function(m){return m.selected && m.qty>0}))
+      repSh.getRange(foundIndex + 1, 10).setValue(JSON.stringify(allMats))
+      
+      // Update repair worker if provided
+      if (workerName) {
+        repSh.getRange(foundIndex + 1, 8).setValue(workerName) // original worker is col 7, repair worker col 8
+      }
+      
+      // Log consumption
+      var logSh = ss.getSheetByName(SHEET.LOG)
+      if (consumed.length > 0) {
+        var datetime = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd.MM.yyyy HH:mm")
+        logSh.appendRow([
+          repairId + '_C', datetime, dateCompleted,
+          row[5], row[4], workerName || row[7],
+          0, row[3],
+          JSON.stringify(consumed),
+          'repair', 'Завершено ремонт: ' + row[3]
+        ])
+      }
+    }
+
+    repSh.getRange(foundIndex + 1, 11).setValue(status) // 11th col is status
+    
+    var curNote = String(row[8] || '')
+    var fullAppend = ""
+    if (noteAppend) fullAppend += noteAppend
+    if (dateCompleted) fullAppend += (fullAppend ? ' | ':'') + 'Завершено: ' + dateCompleted
+    if (fullAppend) {
+       var newNote = curNote + (curNote ? ' | ' : '') + fullAppend
+       repSh.getRange(foundIndex + 1, 9).setValue(newNote) // Note is col 9
+    }
+    
+    return { ok: true, consumed: consumed }
+  })
+}
+
+function num(v)       { return parseFloat(v) || 0 }
+function int(v)       { return parseInt(v)   || 0 }
+function json(s, def) { try { return s ? JSON.parse(s) : def } catch(_) { return def } }

@@ -1,4 +1,4 @@
-﻿
+
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useSwipeable } from 'react-swipeable'
 import { gasCall } from './api.js'
@@ -199,20 +199,46 @@ function AuthScreen({ onAuth }) {
 // ════════════════════════════════════════════════════════
 //  PrepTab — використовує глобальні матеріали
 // ════════════════════════════════════════════════════════
-function PrepTab({ batteryTypes, workers, assemblies, materials, prepItems, onIssueAssembly, onReturn, onChangeScope, isAdmin }) {
+function PrepTab({ batteryTypes, workers, assemblies, materials, prepItems, onIssueAssembly, onIssueConsumable, onReturn, onChangeScope, isAdmin }) {
   const [wId, setWId]         = useState(workers[0]?.id || '')
   const [typeId, setTypeId]   = useState(batteryTypes[0]?.id || '')
-  const [asmId, setAsmId]     = useState('')
+  const [asmId, setAsmId]     = useState(assemblies[0]?.id || '')
+  const [consId, setConsId]   = useState(materials[0]?.id || '')
   const [qty, setQty]         = useState(1)
   const [allTypes, setAllTypes] = useState(false)
   const [forAll, setForAll]   = useState(false)
   const [retVals, setRetVals] = useState({})
+  const [subTab, setSubTab]   = useState('active')
+  
   const active = prepItems.filter(p => p.status !== 'returned')
   const asm = assemblies.find(a => a.id===asmId)
 
+  const renderTotals = () => {
+    const grouped = {}
+    active.forEach(p => {
+      const key = `${p.workerId}_${p.scope}_${p.matId}`
+      if (!grouped[key]) grouped[key] = { workerName: p.workerName, matName: p.matName, unit: p.unit, amount: 0, scope: p.scope }
+      grouped[key].amount += (p.qty - p.returnedQty)
+    })
+    const list = Object.values(grouped).filter(g => g.amount > 0).sort((a,b) => a.workerName.localeCompare(b.workerName))
+    return <Card>
+      <CardTitle color={G.pu}>📊 ЗАГАЛОМ НА РУКАХ</CardTitle>
+      {list.length === 0 ? <div style={{ color:G.t2, fontSize:13 }}>Пусто</div> : 
+        list.map((g,i) => <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:`1px solid ${G.card2}`, fontSize:13 }}>
+          <div><span style={{ fontWeight:600 }}>{g.workerName}</span> <span style={{ color:G.t2, fontSize:11 }}>({g.scope==='all'?'всі':'осб'})</span><br/><span style={{ color:G.t1 }}>{g.matName}</span></div>
+          <div style={{ fontWeight:700, color:G.pu }}>{+g.amount.toFixed(4)} {g.unit}</div>
+        </div>)
+      }
+    </Card>
+  }
+
   return <>
-    <Card>
-      <CardTitle color={G.pu}>📦 ВИДАТИ МАТЕРІАЛ</CardTitle>
+    <SubTabs tabs={[['active','АМ. ВИДАЧІ'],['totals','ЗАГАЛОМ'],['asm','+ ЗБІРКИ'],['cons','+ РОЗХІД']]} active={subTab} onChange={setSubTab} />
+
+    {subTab === 'totals' && renderTotals()}
+
+    {subTab === 'asm' && <Card>
+      <CardTitle color={G.pu}>📦 ВИДАТИ ЗБІРКУ</CardTitle>
       <FormRow label="ПРАЦІВНИК">
         <select value={wId} onChange={e => setWId(e.target.value)}>
           {workers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
@@ -254,10 +280,28 @@ function PrepTab({ batteryTypes, workers, assemblies, materials, prepItems, onIs
           })}
         </div>
       )}
-      <SubmitBtn color={G.pu} onClick={() => onIssueAssembly(wId, asmId, qty, allTypes ? 'ALL' : typeId, forAll)}>📦 ВИДАТИ</SubmitBtn>
-    </Card>
+      <SubmitBtn color={G.pu} onClick={() => { if(asm) onIssueAssembly(wId, asmId, qty, allTypes ? 'ALL' : typeId, forAll) }}>📦 ВИДАТИ</SubmitBtn>
+    </Card>}
 
-    <Card>
+    {subTab === 'cons' && <Card>
+      <CardTitle color={G.pu}>📦 ВИДАТИ РОЗХІДНИЙ МАТЕРІАЛ</CardTitle>
+      <FormRow label="ПРАЦІВНИК">
+        <select value={wId} onChange={e => setWId(e.target.value)}>
+          {workers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+        </select>
+      </FormRow>
+      <FormRow label="МАТЕРІАЛ">
+        <select value={consId} onChange={e => setConsId(e.target.value)}>
+          {materials.map(m => <option key={m.id} value={m.id}>{m.name} ({m.stock} {m.unit})</option>)}
+        </select>
+      </FormRow>
+      <FormRow label="КІЛЬКІСТЬ">
+        <input type="number" value={qty} onChange={e => setQty(parseFloat(e.target.value)||1)} min="0.01" step="0.01" />
+      </FormRow>
+      <SubmitBtn color={G.pu} onClick={() => onIssueConsumable(wId, consId, qty)}>📦 ВИДАТИ</SubmitBtn>
+    </Card>}
+
+    {subTab === 'active' && <Card>
       <CardTitle color={G.pu}>📋 АКТИВНІ ВИДАЧІ ({active.length})</CardTitle>
       {active.length === 0
         ? <div style={{ color:G.t2, fontSize:13, padding:'6px 0' }}>Немає активних видач</div>
@@ -278,7 +322,7 @@ function PrepTab({ batteryTypes, workers, assemblies, materials, prepItems, onIs
             </div>
           </div>
         })}
-    </Card>
+    </Card>}
   </>
 }
 
@@ -356,6 +400,7 @@ function AppInner({ isAdmin, onLogout }) {
   const [repairLog, setRepairLog]     = useState([])
   const [prepItems, setPrepItems]     = useState([])
   const [payments, setPayments]       = useState([])
+  const [toolLog, setToolLog]         = useState([])
 
   // ── UI стан ──────────────────────────────────────────────
   const [prodTypeId, setProdTypeId]   = useState('')
@@ -388,13 +433,16 @@ function AppInner({ isAdmin, onLogout }) {
   // PageWorkers
   const [newWorkerName, setNewWorkerName] = useState('')
   // PageTools
+  const [toolTab, setToolTab]             = useState('active')
   const [newTool, setNewTool]             = useState({ name:'', category:'tool', count:1, serial:'', notes:'' })
   const [toolRepairModal, setToolRepairModal] = useState(null)
   const [toolRepairNote, setToolRepairNote]   = useState('')
   const [toolRepairDate, setToolRepairDate]   = useState(todayStr())
   const [toolRepairWorker, setToolRepairWorker] = useState('')
   // PageManual
+  const [manualTab, setManualTab]         = useState('types')
   const [manualTypeId, setManualTypeId]   = useState('')
+  const [manualAsmId, setManualAsmId]     = useState('')
   const [manualEditing, setManualEditing] = useState(false)
   const [manualDraft, setManualDraft]     = useState('')
   // Swipe hint
@@ -423,6 +471,7 @@ function AppInner({ isAdmin, onLogout }) {
     setSync('loading')
     gasCall('loadAll', [])
       .then(data => {
+        if (data && data.ok === false) throw new Error(data.error || 'Load failed')
         const mats = data.materials || []
         setMaterials(mats)
         setTypeMaterials(data.typeMaterials || [])
@@ -435,6 +484,7 @@ function AppInner({ isAdmin, onLogout }) {
         setRepairLog(data.repairLog || [])
         setPrepItems(data.prepItems || [])
         setPayments(data.payments || [])
+        setToolLog(data.toolLog || [])
         if (data.batteryTypes?.length) {
           setProdTypeId(data.batteryTypes[0].id)
           setConfigTypeId(data.batteryTypes[0].id)
@@ -553,6 +603,48 @@ function AppInner({ isAdmin, onLogout }) {
             const lines = lowMats.map(c => { const m=globalMat(c.matId); const ns=Math.max(0,+(m.stock-c.fromStock).toFixed(4)); return `• ${m.name}: ${ns} ${m.unit} (мін: ${m.minStock})` }).join('\n')
             sendTelegram(`⚠️ ZmiyCell — низький запас\n\n${lines}`)
           }
+        } catch {}
+      }
+    )
+  }
+
+  const doIssueConsumable = (workerId, matId, qty) => {
+    const worker = workers.find(w => w.id===workerId)
+    const gm = materials.find(m => m.id===matId)
+    if (!worker || !gm || !qty || qty<=0) return showToast('Заповніть всі поля', 'err')
+    if (gm.stock < qty) return showToast('Не вистачає: '+gm.name, 'err')
+    openConfirm('Видати розхідний матеріал',
+      <div style={{ fontSize:13, color:G.t2, lineHeight:1.8 }}>
+        <b style={{ color:G.or }}>{gm.name}</b><br/>
+        Кількість: {qty} {gm.unit}<br/>
+        Працівнику: {worker.name}
+      </div>,
+      async () => {
+        closeModal()
+        try {
+          await api('issueConsumable', [worker.id, worker.name, gm.id, gm.name, qty, gm.unit, todayStr(), nowStr()])
+          updateGlobalStock(gm.id, -qty)
+          setLog(prev => [{
+             id:'log_'+Date.now(), datetime:nowStr(), date:todayStr(), typeId:'ALL', typeName:'Розхідні матеріали',
+             workerName:worker.name, count:0, serials:[], consumed:[{matId:gm.id, name:gm.name, unit:gm.unit, amount:qty}], kind:'consumable', repairNote:''
+          }, ...prev])
+          showToast(`✓ Видано ${qty} ${gm.unit}`)
+        } catch {}
+      }
+    )
+  }
+
+  const doUpdateRepairStatus = (repairId, status) => {
+    const isCompleted = status === 'completed'
+    openConfirm(isCompleted ? 'Завершити ремонт?' : 'Змінити статус',
+      'Підтверджуєте зміну статусу ремонту?',
+      async () => {
+        closeModal()
+        const dateCompleted = isCompleted ? todayStr() : ''
+        try {
+          await api('updateRepairStatus', [repairId, status, dateCompleted])
+          setRepairLog(prev => prev.map(r => r.id===repairId ? {...r, status, note: r.note + (isCompleted ? (r.note ? ' | ' : '') + `Завершено: ${dateCompleted}` : '')} : r))
+          showToast('✓ Статус оновлено')
         } catch {}
       }
     )
@@ -1208,17 +1300,19 @@ function AppInner({ isAdmin, onLogout }) {
     const found    = serial ? log.find(l => l.serials?.includes(serial)) : null
     const repType  = found ? batteryTypes.find(t => t.id===found.typeId) : null
     const doSearch = () => setRepairSerial(repairSearch.trim())
+    
+    // UI state for completing a repair
+    const [completingId, setCompletingId] = useState(null)
+    const [compWorker, setCompWorker]     = useState(repWorker)
+    const [compDate, setCompDate]         = useState(todayStr())
+    const [compNote, setCompNote]         = useState('')
+    const [compChecks, setCompChecks]     = useState({})
+    const [compQtys, setCompQtys]         = useState({})
 
-    const handleSubmit = () => {
+    const handleRegisterArrival = () => {
       if (!repType) return
-      const rw = workers.find(w => w.id===repWorker)
-      // Матеріали беруться з typeMaterials для типу, stock з глобального складу
-      const repTms = typeMaterials.filter(tm => tm.typeId===repType.id)
-      const mats = repTms.map(tm => {
-        const gm = globalMat(tm.matId)
-        return { matId:tm.matId, matName:gm?.name??'', unit:gm?.unit??'', qty:parseFloat(matQtys[tm.matId]??tm.perBattery)||0, selected:matChecks[tm.matId]!==false }
-      })
-      doSubmitRepair({id:uid(), datetime:nowStr(), date:repDate, serial, typeName:repType.name, typeId:repType.id, originalWorker:found.workerName, repairWorker:rw?.name||'', note:repNote, materials:mats, status:'completed'})
+      const entry = {id:uid(), datetime:nowStr(), date:repDate, serial, typeName:repType.name, typeId:repType.id, originalWorker:found.workerName, repairWorker:'', note:repNote, materials:[], status:'pending'}
+      doSubmitRepair(entry)
     }
 
     const handleManualRegister = () => {
@@ -1227,6 +1321,73 @@ function AppInner({ isAdmin, onLogout }) {
       const entry = {id:uid(), datetime:nowStr(), date:manDate, typeId:manTypeId, typeName:t?.name||'', workerName:w?.name||'', count:1, serials:[serial], consumed:[], kind:'production', repairNote:''}
       setLog(prev => [entry,...prev])
       showToast('✓ Зареєстровано '+serial)
+    }
+
+    const startCompleting = (r) => {
+      setCompletingId(r.id)
+      setCompWorker(r.repairWorker || repWorker || workers[0]?.id)
+      setCompDate(todayStr())
+      setCompNote('')
+      const initialChecks = {}
+      const initialQtys = {}
+      typeMaterials.filter(tm => tm.typeId===r.typeId).forEach(tm => {
+        initialChecks[tm.matId] = true
+        initialQtys[tm.matId] = tm.perBattery
+      })
+      setCompChecks(initialChecks)
+      setCompQtys(initialQtys)
+    }
+
+    const confirmComplete = async (r) => {
+      // Collect materials
+      const cw = workers.find(w => w.id===compWorker)
+      const repTms = typeMaterials.filter(tm => tm.typeId===r.typeId)
+      const mats = repTms.map(tm => {
+        const gm = globalMat(tm.matId)
+        return { matId:tm.matId, matName:gm?.name??'', unit:gm?.unit??'', qty:parseFloat(compQtys[tm.matId]??tm.perBattery)||0, selected:compChecks[tm.matId]!==false }
+      })
+      
+      const err = mats.filter(m => m.selected && m.qty>0).find(m => {
+        const gm = globalMat(m.matId)
+        return gm && gm.stock < m.qty
+      })
+      if (err) return showToast('Не вистачає на складі: '+err.matName, 'err')
+      
+      openConfirm('Завершити ремонт?', 'Будуть списані матеріали та оновлено статус.', async () => {
+        closeModal()
+        try {
+          const res = await api('updateRepairStatus', [r.id, 'completed', compDate, cw?.name||'', JSON.stringify(mats), compNote])
+          if (!res.ok) throw new Error(res.error)
+          
+          mats.forEach(m => { if (m.selected && m.qty>0) updateGlobalStock(m.matId, -m.qty) })
+          setRepairLog(prev => prev.map(rx => {
+            if (rx.id!==r.id) return rx
+            const curNote = String(rx.note || '')
+            let fullAppend = ""
+            if (compNote) fullAppend += compNote
+            if (compDate) fullAppend += (fullAppend ? ' | ':'') + 'Завершено: ' + compDate
+            const newNote = curNote + (curNote ? ' | ' : '') + fullAppend
+            
+            // update local repair materials array too
+            const curMats = rx.materials || []
+            const newMats = curMats.concat(mats.filter(m => m.selected && m.qty>0))
+            return {...rx, status:'completed', note:newNote, repairWorker:cw?.name||'', materials:newMats}
+          }))
+          
+          if (res.consumed && res.consumed.length > 0) {
+            setLog(prev => [{
+               id:r.id+'_C', datetime:nowStr(), date:compDate, typeId:r.typeId, typeName:r.typeName, 
+               workerName:cw?.name||rx.repairWorker, count:0, serials:[r.serial], consumed:res.consumed, 
+               kind:'repair', repairNote:'Завершено ремонт: '+r.serial
+            }, ...prev])
+          }
+          
+          setCompletingId(null)
+          showToast('✓ Ремонт успішно завершено')
+        } catch (e) {
+          showToast(e.message||'Помилка', 'err')
+        }
+      })
     }
 
     const returnAll = (r) => openConfirm('Повернути всі матеріали?','Повернуться на склад.', async () => {
@@ -1247,7 +1408,7 @@ function AppInner({ isAdmin, onLogout }) {
       <SubTabs tabs={[['new','🔧 НОВИЙ'],['log','📋 ЗАПИСИ']]} active={repTab} onChange={setRepTab} />
       {repTab==='new' && <>
         <Card>
-          <CardTitle color='#fb923c'>🔧 НОВИЙ РЕМОНТ</CardTitle>
+          <CardTitle color='#fb923c'>🔧 РЕЄСТРАЦІЯ РЕМОНТУ</CardTitle>
           <FormRow label="СЕРІЙНИЙ НОМЕР">
             <div style={{ display:'flex', gap:6 }}>
               <input value={repairSearch} onChange={e => setRepairSearch(e.target.value)} placeholder="напр. SK-2026-001" onKeyDown={e => e.key==='Enter'&&doSearch()} />
@@ -1258,32 +1419,9 @@ function AppInner({ isAdmin, onLogout }) {
 
         {serial && found && repType && <Card style={{ borderColor:G.gn }}>
           <div style={{ color:G.gn, fontSize:12, marginBottom:12 }}>✓ Знайдено: {found.typeName} · {found.workerName} · {found.date}</div>
-          <FormRow label="РЕМОНТУЄ">
-            <select value={repWorker} onChange={e => setRepWorker(e.target.value)}>
-              {workers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-            </select>
-          </FormRow>
-          <FormRow label="ДАТА"><input value={repDate} onChange={e => setRepDate(e.target.value)} /></FormRow>
-          <FormRow label="НОТАТКА / НЕСПРАВНІСТЬ"><input value={repNote} onChange={e => setRepNote(e.target.value)} placeholder="напр. заміна BMS" /></FormRow>
-          <FormRow label="МАТЕРІАЛИ ДЛЯ ЗАМІНИ">
-            {typeMaterials.filter(tm => tm.typeId===repType.id).map(tm => {
-              const gm = globalMat(tm.matId)
-              if (!gm) return null
-              const checked = matChecks[tm.matId]!==false
-              const qty = matQtys[tm.matId]??tm.perBattery
-              const ok = !checked || !qty || gm.stock>=(parseFloat(qty)||0)
-              return <div key={tm.matId} style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 0', borderBottom:`1px solid ${G.b1}`, fontSize:13 }}>
-                <input type="checkbox" checked={checked} onChange={e => setMatChecks(v => ({...v,[tm.matId]:e.target.checked}))} style={{ width:18, height:18, accentColor:G.or, cursor:'pointer', flexShrink:0 }} />
-                <div style={{ flex:1 }}>
-                  <div style={{ color:checked?G.t1:G.t2 }}>{gm.name}</div>
-                  <div style={{ fontSize:11, color:ok?G.t2:G.rd }}>склад: {gm.stock} {gm.unit}</div>
-                </div>
-                <input type="number" value={qty} onChange={e => setMatQtys(v => ({...v,[tm.matId]:e.target.value}))} style={{ width:70, border:`1px solid ${ok?G.b2:G.rd}`, textAlign:'center' }} />
-                <span style={{ color:G.t2, fontSize:11, width:32, flexShrink:0 }}>{gm.unit}</span>
-              </div>
-            })}
-          </FormRow>
-          <SubmitBtn onClick={handleSubmit} color='#ea580c'>🔧 СПИСАТИ НА РЕМОНТ</SubmitBtn>
+          <FormRow label="ДАТА ПРИЙОМКИ"><input value={repDate} onChange={e => setRepDate(e.target.value)} /></FormRow>
+          <FormRow label="ОПИС НЕСПРАВНОСТІ / НОТАТКА"><input value={repNote} onChange={e => setRepNote(e.target.value)} placeholder="напр. не заряджається" /></FormRow>
+          <SubmitBtn onClick={handleRegisterArrival} color='#ea580c'>🔧 ПРИЙНЯТИ В РЕМОНТ</SubmitBtn>
         </Card>}
 
         {serial && !found && <Card style={{ borderColor:G.yw }}>
@@ -1306,24 +1444,61 @@ function AppInner({ isAdmin, onLogout }) {
       </>}
 
       {repTab==='log' && (repairLog.length===0 ? <Center>Ремонтів немає</Center> :
-        repairLog.map(r => <div key={r.id} style={{ background:G.card, border:`1px solid ${G.b1}`, borderLeft:'3px solid #fb923c', borderRadius:12, padding:12, marginBottom:10 }}>
+        repairLog.map(r => <div key={r.id} style={{ background:G.card, border:`1px solid ${G.b1}`, borderLeft:`3px solid ${r.status==='completed'?'#22c55e':'#fb923c'}`, borderRadius:12, padding:12, marginBottom:10 }}>
           <div style={{ display:'flex', justifyContent:'space-between', marginBottom:6 }}>
             <div>
-              <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:15, fontWeight:700 }}>{r.serial}</div>
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <span style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:15, fontWeight:700 }}>{r.serial}</span>
+                {r.status!=='completed' ? <Chip bg='#4a1804' color='#fb923c' bd='#9a3412'>ОЧІКУЄ</Chip> : <Chip bg='#052e16' color='#22c55e' bd='#166534'>ГОТОВО</Chip>}
+              </div>
               <div style={{ fontSize:12, color:G.t2 }}>{r.typeName}</div>
             </div>
             <span style={{ fontSize:11, color:G.t2 }}>{r.datetime}</span>
           </div>
           {r.note && <div style={{ fontSize:12, color:'#fb923c', marginBottom:5 }}>📝 {r.note}</div>}
-          <div style={{ fontSize:12, color:G.t2, marginBottom:8 }}>Ремонтував: {r.repairWorker}</div>
-          <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:8 }}>
+          {r.repairWorker && <div style={{ fontSize:12, color:G.t2, marginBottom:8 }}>Ремонтував: {r.repairWorker}</div>}
+          <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:r.status==='completed'?8:0 }}>
             {(r.materials||[]).filter(m => m.selected&&m.qty>0).map((m,i) =>
               <Chip key={i} bg={G.b1} color={G.t2} bd={G.b2}>{m.matName} ×{m.qty}</Chip>)}
           </div>
-          <div style={{ display:'flex', gap:6 }}>
-            <button onClick={() => returnAll(r)} style={{ flex:1, padding:'6px 0', background:'#052e16', color:G.gn, border:`1px solid #166534`, borderRadius:8, fontSize:12, cursor:'pointer' }}>↩ Повернути</button>
+          
+          {completingId === r.id ? <div style={{ borderTop:`1px solid ${G.b1}`, paddingTop:10, marginTop:10 }}>
+            <FormRow label="ДАТА ЗАВЕРШЕННЯ"><input value={compDate} onChange={e => setCompDate(e.target.value)} /></FormRow>
+            <FormRow label="РЕМОНТУВАВ КОНТРАКТНИК">
+              <select value={compWorker} onChange={e => setCompWorker(e.target.value)}>
+                {workers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+              </select>
+            </FormRow>
+            <FormRow label="ВИТРАЧЕНІ МАТЕРІАЛИ">
+              {typeMaterials.filter(tm => tm.typeId===r.typeId).map(tm => {
+                const gm = globalMat(tm.matId)
+                if (!gm) return null
+                const checked = compChecks[tm.matId]!==false
+                const qty = compQtys[tm.matId]??tm.perBattery
+                const ok = !checked || !qty || gm.stock>=(parseFloat(qty)||0)
+                return <div key={tm.matId} style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 0', borderBottom:`1px solid ${G.b1}`, fontSize:13 }}>
+                  <input type="checkbox" checked={checked} onChange={e => setCompChecks(v => ({...v,[tm.matId]:e.target.checked}))} style={{ width:18, height:18, accentColor:G.or, cursor:'pointer', flexShrink:0 }} />
+                  <div style={{ flex:1 }}>
+                    <div style={{ color:checked?G.t1:G.t2 }}>{gm.name}</div>
+                    <div style={{ fontSize:11, color:ok?G.t2:G.rd }}>склад: {gm.stock} {gm.unit}</div>
+                  </div>
+                  <input type="number" value={qty} onChange={e => setCompQtys(v => ({...v,[tm.matId]:e.target.value}))} style={{ width:70, border:`1px solid ${ok?G.b2:G.rd}`, textAlign:'center' }} />
+                  <span style={{ color:G.t2, fontSize:11, width:32, flexShrink:0 }}>{gm.unit}</span>
+                </div>
+              })}
+            </FormRow>
+            <FormRow label="ДОДАТИ НОТАТКУ (необов'язково)"><input value={compNote} onChange={e => setCompNote(e.target.value)} placeholder="напр. замінено BMS" /></FormRow>
+            <div style={{ display:'flex', gap:6 }}>
+              <button onClick={() => confirmComplete(r)} style={{ flex:1, padding:'8px', background:'#166534', color:G.gn, border:'none', borderRadius:8, fontSize:13, fontWeight:700, cursor:'pointer' }}>✓ ЗАВЕРШИТИ РЕМОНТ</button>
+              <button onClick={() => setCompletingId(null)} style={{ padding:'8px 12px', background:G.b1, color:G.t2, border:`1px solid ${G.b2}`, borderRadius:8, fontSize:13, cursor:'pointer' }}>Скасувати</button>
+            </div>
+          </div> : null}
+
+          {!completingId && <div style={{ display:'flex', gap:6, marginTop:8 }}>
+            {r.status !== 'completed' && <button onClick={() => startCompleting(r)} style={{ flex:2, padding:'6px 0', background:'#4c1d95', color:'#a78bfa', border:`1px solid #7c3aed`, borderRadius:8, fontSize:12, fontWeight:700, cursor:'pointer' }}>✓ Завершити</button>}
+            {r.status === 'completed' && <button onClick={() => returnAll(r)} style={{ flex:1, padding:'6px 0', background:'#052e16', color:G.gn, border:`1px solid #166534`, borderRadius:8, fontSize:12, cursor:'pointer' }}>↩ Повернути</button>}
             {isAdmin && <button onClick={() => deleteRep(r)} style={{ padding:'6px 10px', background:'#450a0a', border:'none', color:G.rd, borderRadius:8, fontSize:12, cursor:'pointer' }}>✕</button>}
-          </div>
+          </div>}
         </div>)
       )}
     </>)
@@ -1515,7 +1690,13 @@ function AppInner({ isAdmin, onLogout }) {
     const addTool = () => {
       if(!nt.name.trim()) return showToast('Введіть назву','err')
       const t={id:'t'+uid(),...nt,working:nt.count,repairNote:'',repairDate:''}
-      api('saveTool',[t]).then(()=>{setTools(p=>[...p,t]);setNt({name:'',category:'tool',count:1,serial:'',notes:''});showToast('✓ Додано '+nt.name)}).catch(()=>{})
+      api('saveTool',[t]).then(()=>{
+        setTools(p=>[...p,t])
+        setNt({name:'',category:'tool',count:1,serial:'',notes:''})
+        showToast('✓ Додано '+nt.name)
+        api('logToolEvent', [t.id, t.name, todayStr(), nowStr(), 'added', 'Адмін', 'Додано на склад']).catch(()=>{})
+        setToolLog(p=>[{id:'tl_'+Date.now(), toolId:t.id, toolName:t.name, date:todayStr(), datetime:nowStr(), event:'added', workerName:'Адмін', note:'Додано на склад'}, ...p])
+      }).catch(()=>{})
     }
     const openRepairModal = (t) => { setRepairModal(t); setRepairNote(t.repairNote||''); setRepairDate(todayStr()) }
     const submitToolRepair = async () => {
@@ -1525,8 +1706,25 @@ function AppInner({ isAdmin, onLogout }) {
       try {
         await api('reportToolRepair',[repairModal.id,repairNote,repairDate,worker?.name||''])
         setTools(prev=>prev.map(t=>t.id!==repairModal.id?t:{...t,repairNote,repairDate}))
+        api('logToolEvent', [repairModal.id, repairModal.name, repairDate, nowStr(), 'broken', worker?.name||'', repairNote]).catch(()=>{})
+        setToolLog(p=>[{id:'tl_'+Date.now(), toolId:repairModal.id, toolName:repairModal.name, date:repairDate, datetime:nowStr(), event:'broken', workerName:worker?.name||'', note:repairNote}, ...p])
         showToast('✓ Повідомлено про ремонт — бот сповіщено'); setRepairModal(null)
       } catch {}
+    }
+
+    const completeToolRepair = async (t) => {
+      openConfirm('Інструмент відремонтовано?', 'Підтверджуєте повернення в роботу?', async () => {
+        closeModal()
+        try {
+          await api('reportToolRepair',[t.id,'','','']) // clear repair note
+          const next={...t, working:t.count, repairNote:'', repairDate:''}
+          await api('saveTool',[next])
+          setTools(prev=>prev.map(tx=>tx.id!==t.id?tx:next))
+          api('logToolEvent', [t.id, t.name, todayStr(), nowStr(), 'fixed', 'Адмін', 'Повернуто в роботу']).catch(()=>{})
+          setToolLog(p=>[{id:'tl_'+Date.now(), toolId:t.id, toolName:t.name, date:todayStr(), datetime:nowStr(), event:'fixed', workerName:'Адмін', note:'Повернуто в роботу'}, ...p])
+          showToast('✓ Інструмент у робочому стані')
+        } catch {}
+      })
     }
 
     return wrap(<>
@@ -1545,105 +1743,144 @@ function AppInner({ isAdmin, onLogout }) {
         </Modal>
       )}
 
-      {tools.map(t => {
-        const broken=t.count-t.working
-        return <div key={t.id} style={{ background:G.card, border:`1px solid ${G.b1}`, borderLeft:`3px solid ${broken>0?G.rd:G.gn}`, borderRadius:12, padding:14, marginBottom:10 }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-            <div style={{ flex:1 }}>
-              <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:16, fontWeight:700 }}>{t.name}</div>
-              <div style={{ fontSize:12, color:G.t2, marginTop:2 }}>{t.category==='equipment'?'⚙ ОБЛАДНАННЯ':'🛠 ІНСТРУМЕНТ'}{t.serial&&' · '+t.serial}</div>
-              {broken>0 && <div style={{color:G.rd,fontSize:12,marginTop:4}}>⚠ {broken} шт. несправних</div>}
-              {t.notes && <div style={{color:G.t2,fontSize:12,marginTop:3}}>📝 {t.notes}</div>}
-              {t.repairNote && <div style={{color:'#fb923c',fontSize:12,marginTop:3}}>🔧 {t.repairNote} {t.repairDate&&'· '+t.repairDate}</div>}
-            </div>
-            <div style={{ display:'flex', gap:6, flexShrink:0 }}>
-              <button onClick={()=>openRepairModal(t)} style={{ background:'#431407', border:`1px solid #9a3412`, color:'#fb923c', padding:'5px 10px', borderRadius:8, cursor:'pointer', fontSize:12 }}>🔧 Ремонт</button>
-              {isAdmin && <button onClick={()=>deleteTool(t)} style={{ background:'#450a0a', border:'none', color:G.rd, padding:'5px 9px', borderRadius:8, cursor:'pointer' }}>✕</button>}
-            </div>
-          </div>
-          {isAdmin && <div style={{ display:'flex', gap:10, alignItems:'center', marginTop:10, flexWrap:'wrap' }}>
-            <span style={{fontSize:13,color:G.t2}}>Всього:</span>
-            <QtyBtn onClick={()=>changeTool(t.id,'count',-1)}>−</QtyBtn>
-            <b style={{minWidth:24,textAlign:'center'}}>{t.count}</b>
-            <QtyBtn onClick={()=>changeTool(t.id,'count',1)}>+</QtyBtn>
-            <span style={{fontSize:13,color:G.t2}}>Робочих:</span>
-            <QtyBtn onClick={()=>changeTool(t.id,'working',-1)}>−</QtyBtn>
-            <b style={{color:G.gn,minWidth:24,textAlign:'center'}}>{t.working}</b>
-            <QtyBtn onClick={()=>changeTool(t.id,'working',1)}>+</QtyBtn>
-          </div>}
-          {!isAdmin && <div style={{ display:'flex', gap:6, marginTop:8 }}>
-            <span style={{fontSize:12,color:G.t2}}>Всього: <b style={{color:G.t1}}>{t.count}</b></span>
-            <span style={{fontSize:12,color:G.t2}}>· Робочих: <b style={{color:G.gn}}>{t.working}</b></span>
-            {broken>0&&<span style={{fontSize:12,color:G.rd}}>· Несправних: <b>{broken}</b></span>}
-          </div>}
-        </div>
-      })}
+      <SubTabs tabs={[['active','🛠 АКТИВНІ'],['log','📋 ЖУРНАЛ']]} active={toolTab} onChange={setToolTab} />
 
-      {isAdmin && <Card>
-        <CardTitle color={G.gn}>+ ДОДАТИ ІНСТРУМЕНТ</CardTitle>
-        <input placeholder="Назва" value={nt.name} onChange={e=>setNt(v=>({...v,name:e.target.value}))} style={{marginBottom:6}} />
-        <select value={nt.category} onChange={e=>setNt(v=>({...v,category:e.target.value}))} style={{marginBottom:6}}>
-          <option value="tool">🛠 Інструмент</option>
-          <option value="equipment">⚙ Обладнання</option>
-        </select>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, marginBottom:6 }}>
-          <input type="number" placeholder="Кількість" value={nt.count} min="1" onChange={e=>setNt(v=>({...v,count:parseInt(e.target.value)||1}))} />
-          <input placeholder="С/н (необов.)" value={nt.serial} onChange={e=>setNt(v=>({...v,serial:e.target.value}))} />
-        </div>
-        <input placeholder="Нотатка" value={nt.notes} onChange={e=>setNt(v=>({...v,notes:e.target.value}))} style={{marginBottom:4}} />
-        <SubmitBtn onClick={addTool} color={G.gn}>+ ДОДАТИ</SubmitBtn>
-      </Card>}
+      {toolTab==='active' && <>
+        {tools.map(t => {
+          const broken=t.count-t.working
+          return <div key={t.id} style={{ background:G.card, border:`1px solid ${G.b1}`, borderLeft:`3px solid ${broken>0?G.rd:G.gn}`, borderRadius:12, padding:14, marginBottom:10 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:16, fontWeight:700 }}>{t.name}</div>
+                <div style={{ fontSize:12, color:G.t2, marginTop:2 }}>{t.category==='equipment'?'⚙ ОБЛАДНАННЯ':'🛠 ІНСТРУМЕНТ'}{t.serial&&' · '+t.serial}</div>
+                {broken>0 && <div style={{color:G.rd,fontSize:12,marginTop:4}}>⚠ {broken} шт. несправних</div>}
+                {t.notes && <div style={{color:G.t2,fontSize:12,marginTop:3}}>📝 {t.notes}</div>}
+                {t.repairNote && <div style={{color:'#fb923c',fontSize:12,marginTop:3}}>🔧 {t.repairNote} {t.repairDate&&'· '+t.repairDate}</div>}
+              </div>
+              <div style={{ display:'flex', gap:6, flexShrink:0, flexDirection:'column', alignItems:'flex-end' }}>
+                {!t.repairNote && <button onClick={()=>openRepairModal(t)} style={{ background:'#431407', border:`1px solid #9a3412`, color:'#fb923c', padding:'5px 10px', borderRadius:8, cursor:'pointer', fontSize:12 }}>🔧 В ремонт</button>}
+                {t.repairNote && isAdmin && <button onClick={()=>completeToolRepair(t)} style={{ background:'#052e16', border:`1px solid #166534`, color:G.gn, padding:'5px 10px', borderRadius:8, cursor:'pointer', fontSize:12 }}>✓ Відремонтовано</button>}
+                {isAdmin && <button onClick={()=>deleteTool(t)} style={{ background:'#450a0a', border:'none', color:G.rd, padding:'5px 10px', borderRadius:8, cursor:'pointer', fontSize:12, alignSelf:'flex-end', marginTop:4 }}>✕ Видалити</button>}
+              </div>
+            </div>
+            {isAdmin && <div style={{ display:'flex', gap:10, alignItems:'center', marginTop:10, flexWrap:'wrap' }}>
+              <span style={{fontSize:13,color:G.t2}}>Всього:</span>
+              <QtyBtn onClick={()=>changeTool(t.id,'count',-1)}>−</QtyBtn>
+              <b style={{minWidth:24,textAlign:'center'}}>{t.count}</b>
+              <QtyBtn onClick={()=>changeTool(t.id,'count',1)}>+</QtyBtn>
+              <span style={{fontSize:13,color:G.t2}}>Робочих:</span>
+              <QtyBtn onClick={()=>changeTool(t.id,'working',-1)}>−</QtyBtn>
+              <b style={{color:G.gn,minWidth:24,textAlign:'center'}}>{t.working}</b>
+              <QtyBtn onClick={()=>changeTool(t.id,'working',1)}>+</QtyBtn>
+            </div>}
+            {!isAdmin && <div style={{ display:'flex', gap:6, marginTop:8 }}>
+              <span style={{fontSize:12,color:G.t2}}>Всього: <b style={{color:G.t1}}>{t.count}</b></span>
+              <span style={{fontSize:12,color:G.t2}}>· Робочих: <b style={{color:G.gn}}>{t.working}</b></span>
+              {broken>0&&<span style={{fontSize:12,color:G.rd}}>· Несправних: <b>{broken}</b></span>}
+            </div>}
+          </div>
+        })}
+
+        {isAdmin && <Card>
+          <CardTitle color={G.gn}>+ ДОДАТИ ІНСТРУМЕНТ</CardTitle>
+          <input placeholder="Назва" value={nt.name} onChange={e=>setNt(v=>({...v,name:e.target.value}))} style={{marginBottom:6}} />
+          <select value={nt.category} onChange={e=>setNt(v=>({...v,category:e.target.value}))} style={{marginBottom:6}}>
+            <option value="tool">🛠 Інструмент</option>
+            <option value="equipment">⚙ Обладнання</option>
+          </select>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, marginBottom:6 }}>
+            <input type="number" placeholder="Кількість" value={nt.count} min="1" onChange={e=>setNt(v=>({...v,count:parseInt(e.target.value)||1}))} />
+            <input placeholder="С/н (необов.)" value={nt.serial} onChange={e=>setNt(v=>({...v,serial:e.target.value}))} />
+          </div>
+          <input placeholder="Нотатка" value={nt.notes} onChange={e=>setNt(v=>({...v,notes:e.target.value}))} style={{marginBottom:4}} />
+          <SubmitBtn onClick={addTool} color={G.gn}>+ ДОДАТИ</SubmitBtn>
+        </Card>}
+      </>}
+
+      {toolTab==='log' && (
+        toolLog.length===0 ? <Center>Журнал порожній</Center> :
+        toolLog.map(e => {
+          const color = e.event==='added'?G.gn:e.event==='broken'?G.rd:e.event==='fixed'?G.cy:G.t2
+          const icon  = e.event==='added'?'+':e.event==='broken'?'🔧':e.event==='fixed'?'✓':'•'
+          return <div key={e.id} style={{ background:G.card, border:`1px solid ${G.b1}`, borderRadius:12, padding:12, marginBottom:8, borderLeft:`3px solid ${color}` }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:5 }}>
+              <div>
+                <span style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:15, fontWeight:700 }}>{icon} {e.toolName}</span>
+                <div style={{ fontSize:12, color:G.t2, marginTop:2 }}>{e.workerName}</div>
+              </div>
+              <span style={{ fontSize:11, color:G.t2, flexShrink:0 }}>{e.datetime}</span>
+            </div>
+            {e.note && <div style={{ fontSize:12, color:e.event==='broken'?'#fb923c':G.t1, marginTop:4 }}>{e.note}</div>}
+          </div>
+        })
+      )}
     </>)
   }
 
   // ── Мануал ────────────────────────────────────────────────
   const PageManual = () => {
-    const type     = batteryTypes.find(t => t.id===manualTypeId)||batteryTypes[0]
-    const editing  = manualEditing; const setEditing=setManualEditing
-    const draftSteps=manualDraft; const setDraftSteps=setManualDraft
-    const currentManual = type?.manual||''
+    const isTypes = manualTab === 'types'
+    const list = isTypes ? batteryTypes : assemblies
+    const activeId = isTypes ? (manualTypeId || batteryTypes[0]?.id) : (manualAsmId || assemblies[0]?.id)
+    const item = list.find(t => t.id === activeId) || list[0]
+    
+    const editing = manualEditing; const setEditing = setManualEditing
+    const draftSteps = manualDraft; const setDraftSteps = setManualDraft
+    const currentManual = item?.manual || ''
 
     const startEdit = () => { setDraftSteps(currentManual); setEditing(true) }
     const saveManual = async () => {
-      if (!type) return
-      await api('updateBatteryTypeField',[type.id,'manual',draftSteps])
-      setBatteryTypes(prev => prev.map(t => t.id!==type.id?t:{...t,manual:draftSteps}))
+      if (!item) return
+      if (isTypes) {
+        await api('updateBatteryTypeField', [item.id, 'manual', draftSteps])
+        setBatteryTypes(prev => prev.map(t => t.id !== item.id ? t : { ...t, manual: draftSteps }))
+      } else {
+        await api('updateAssemblyField', [item.id, 'manual', draftSteps])
+        setAssemblies(prev => prev.map(a => a.id !== item.id ? a : { ...a, manual: draftSteps }))
+      }
       setEditing(false); showToast('✓ Технологічну карту збережено')
     }
 
     const formatManual = (text) => {
       if (!text) return null
-      return text.split('\n').map((line,i) => {
-        const isStep   = /^\d+[\.\)]/.test(line.trim())
-        const isNote   = /^(⚠|!|УВАГА|Примітка)/i.test(line.trim())
+      return text.split('\n').map((line, i) => {
+        const isStep = /^\d+[\.\)]/.test(line.trim())
+        const isNote = /^(⚠|!|УВАГА|Примітка)/i.test(line.trim())
         const isHeader = /^#{1,3}\s/.test(line.trim())
-        if (isHeader) return <div key={i} style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:16, fontWeight:700, color:G.or, marginTop:16, marginBottom:8 }}>{line.replace(/^#+\s/,'')}</div>
-        if (isStep)   return <div key={i} style={{ display:'flex', gap:10, padding:'8px 0', borderBottom:`1px solid ${G.b1}` }}>
-          <span style={{ color:G.or, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif", fontSize:15, flexShrink:0 }}>{line.match(/^\d+/)?.[0]}.</span>
-          <span style={{ fontSize:14, color:G.t1 }}>{line.replace(/^\d+[\.\)]\s*/,'')}</span>
+        const isImage = /!\[.*?\]\((.*?)\)/.test(line.trim())
+
+        if (isImage) {
+          const url = line.match(/!\[.*?\]\((.*?)\)/)[1]
+          return <div key={i} style={{ margin: '16px 0', textAlign: 'center' }}><img src={url} alt="manual-img" style={{ maxWidth: '100%', borderRadius: 8, border: `1px solid ${G.b1}` }} /></div>
+        }
+        if (isHeader) return <div key={i} style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 16, fontWeight: 700, color: G.or, marginTop: 16, marginBottom: 8 }}>{line.replace(/^#+\s/, '')}</div>
+        if (isStep) return <div key={i} style={{ display: 'flex', gap: 10, padding: '8px 0', borderBottom: `1px solid ${G.b1}` }}>
+          <span style={{ color: G.or, fontWeight: 700, fontFamily: "'Barlow Condensed',sans-serif", fontSize: 15, flexShrink: 0 }}>{line.match(/^\d+/)?.[0]}.</span>
+          <span style={{ fontSize: 14, color: G.t1 }}>{line.replace(/^\d+[\.\)]\s*/, '')}</span>
         </div>
-        if (isNote)   return <div key={i} style={{ background:'#431407', border:`1px solid #9a3412`, borderRadius:8, padding:'8px 12px', margin:'8px 0', fontSize:13, color:'#fed7aa' }}>{line}</div>
-        return <div key={i} style={{ fontSize:14, color:G.t2, padding:'3px 0', minHeight:20 }}>{line||' '}</div>
+        if (isNote) return <div key={i} style={{ background: '#431407', border: `1px solid #9a3412`, borderRadius: 8, padding: '8px 12px', margin: '8px 0', fontSize: 13, color: '#fed7aa' }}>{line}</div>
+        return <div key={i} style={{ fontSize: 14, color: G.t2, padding: '3px 0', minHeight: 20 }}>{line || ' '}</div>
       })
     }
 
     return wrap(<>
-      <TypeTabs types={batteryTypes} active={manualTypeId||batteryTypes[0]?.id} onSelect={setManualTypeId} />
+      <SubTabs tabs={[['types', 'БАТАРЕЇ'], ['assemblies', 'ЗБІРКИ']]} active={manualTab} onChange={setManualTab} />
+      {list.length > 0 && <TypeTabs types={list} active={activeId} onSelect={isTypes ? setManualTypeId : setManualAsmId} />}
       {!editing ? (
         <Card>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
-            <CardTitle style={{marginBottom:0}}>📖 {type?.name}</CardTitle>
-            {isAdmin && <button onClick={startEdit} style={{ padding:'6px 12px', background:G.b1, border:`1px solid ${G.b2}`, color:G.yw, borderRadius:8, fontSize:12, cursor:'pointer' }}>✎ Редагувати</button>}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <CardTitle style={{ marginBottom: 0 }}>📖 {item?.name || 'Оберіть елемент'}</CardTitle>
+            {item && isAdmin && <button onClick={startEdit} style={{ padding: '6px 12px', background: G.b1, border: `1px solid ${G.b2}`, color: G.yw, borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>✎ Редагувати</button>}
           </div>
-          {currentManual ? formatManual(currentManual) : <div style={{ color:G.t2, fontSize:13, padding:'10px 0' }}>Мануал порожній. {isAdmin&&'Натисніть "Редагувати" щоб додати.'}</div>}
+          {currentManual ? formatManual(currentManual) : <div style={{ color: G.t2, fontSize: 13, padding: '10px 0' }}>Мануал порожній. {isAdmin && 'Натисніть "Редагувати" щоб додати.'}</div>}
         </Card>
       ) : (
         <Card>
           <CardTitle color={G.yw}>✎ РЕДАГУВАННЯ МАНУАЛУ</CardTitle>
-          <textarea value={draftSteps} onChange={e=>setDraftSteps(e.target.value)} style={{minHeight:300,fontFamily:"'Fira Code',monospace",fontSize:13}} placeholder={'# Заголовок\n1. Крок перший\n2. Крок другий\n⚠ Примітка'} />
-          <div style={{display:'flex',gap:8,marginTop:8}}>
+          <textarea value={draftSteps} onChange={e => setDraftSteps(e.target.value)} style={{ minHeight: 300, fontFamily: "'Fira Code',monospace", fontSize: 13 }} placeholder={'# Заголовок\n1. Крок перший\n2. Крок другий\n⚠ Примітка\n![alt](https://image.url)'} />
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
             <SubmitBtn onClick={saveManual} color={G.gn}>✓ ЗБЕРЕГТИ</SubmitBtn>
-            <button onClick={()=>setEditing(false)} style={{flex:1,padding:12,background:G.b1,color:G.t2,border:`1px solid ${G.b2}`,borderRadius:12,cursor:'pointer',marginTop:10}}>Скасувати</button>
+            <button onClick={() => setEditing(false)} style={{ flex: 1, padding: 12, background: G.b1, color: G.t2, border: `1px solid ${G.b2}`, borderRadius: 12, cursor: 'pointer', marginTop: 10 }}>Скасувати</button>
           </div>
         </Card>
       )}
