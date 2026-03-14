@@ -430,6 +430,12 @@ function AppInner({ isAdmin, onLogout }) {
   const [manTypeId, setManTypeId]     = useState('')
   const [manWorkerId, setManWorkerId] = useState('')
   const [manDate, setManDate]         = useState(todayStr())
+  const [completingId, setCompletingId] = useState(null)
+  const [compWorker, setCompWorker]     = useState('')
+  const [compDate, setCompDate]         = useState(todayStr())
+  const [compNote, setCompNote]         = useState('')
+  const [compChecks, setCompChecks]     = useState({})
+  const [compQtys, setCompQtys]         = useState({})
   // PageWorkers
   const [newWorkerName, setNewWorkerName] = useState('')
   // PageTools
@@ -1310,10 +1316,10 @@ function AppInner({ isAdmin, onLogout }) {
       </>
     }
 
-    return wrap(<>
+    return <>
       <SubTabs tabs={[['materials','📦 МАТЕРІАЛИ'],['types','🔋 ТИПИ БАТАРЕЙ'],['assemblies','⚙️ ЗБІРКИ']]} active={stockTab} onChange={setStockTab} />
       {stockTab==='materials' ? TabMaterials() : stockTab==='types' ? TabTypes() : TabAssemblies()}
-    </>)
+    </>
   }
   // ── Ремонт ────────────────────────────────────────────────
   const PageRepair = () => {
@@ -1322,13 +1328,6 @@ function AppInner({ isAdmin, onLogout }) {
     const repType  = found ? batteryTypes.find(t => t.id===found.typeId) : null
     const doSearch = () => setRepairSerial(repairSearch.trim())
     
-    // UI state for completing a repair
-    const [completingId, setCompletingId] = useState(null)
-    const [compWorker, setCompWorker]     = useState(repWorker)
-    const [compDate, setCompDate]         = useState(todayStr())
-    const [compNote, setCompNote]         = useState('')
-    const [compChecks, setCompChecks]     = useState({})
-    const [compQtys, setCompQtys]         = useState({})
 
     const handleRegisterArrival = () => {
       if (!repType) return
