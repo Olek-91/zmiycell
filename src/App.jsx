@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+﻿
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useSwipeable } from 'react-swipeable'
 import { gasCall } from './api.js'
 
@@ -195,7 +196,6 @@ function AuthScreen({ onAuth }) {
     </div>
   )
 }
-
 // ════════════════════════════════════════════════════════
 //  PrepTab — використовує глобальні матеріали
 // ════════════════════════════════════════════════════════
@@ -204,6 +204,7 @@ function PrepTab({ batteryTypes, workers, materials, prepItems, onIssue, onRetur
   const [typeId, setTypeId]   = useState(batteryTypes[0]?.id || '')
   const [matId, setMatId]     = useState('')
   const [qty, setQty]         = useState(1)
+  const [allTypes, setAllTypes] = useState(false)
   const [retVals, setRetVals] = useState({})
   const active = prepItems.filter(p => p.status !== 'returned')
 
@@ -216,10 +217,14 @@ function PrepTab({ batteryTypes, workers, materials, prepItems, onIssue, onRetur
         </select>
       </FormRow>
       <FormRow label="ТИП АКУМУЛЯТОРА">
-        <select value={typeId} onChange={e => setTypeId(e.target.value)}>
+        <select value={typeId} onChange={e => setTypeId(e.target.value)} disabled={allTypes}>
           {batteryTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
       </FormRow>
+      <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+        <input id="prep-all-types" type="checkbox" checked={allTypes} onChange={e => setAllTypes(e.target.checked)} />
+        <label htmlFor="prep-all-types" style={{ fontSize:12, color:G.t2 }}>Для всіх типів</label>
+      </div>
       <FormRow label="МАТЕРІАЛ">
         <select value={matId} onChange={e => setMatId(e.target.value)}>
           <option value="">— оберіть матеріал —</option>
@@ -229,7 +234,7 @@ function PrepTab({ batteryTypes, workers, materials, prepItems, onIssue, onRetur
       <FormRow label="КІЛЬКІСТЬ">
         <input type="number" value={qty} onChange={e => setQty(parseFloat(e.target.value)||1)} min="0.01" step="0.01" />
       </FormRow>
-      <SubmitBtn color={G.pu} onClick={() => onIssue(wId, matId, qty, typeId)}>📦 ВИДАТИ</SubmitBtn>
+      <SubmitBtn color={G.pu} onClick={() => onIssue(wId, matId, qty, allTypes ? 'ALL' : typeId)}>📦 ВИДАТИ</SubmitBtn>
     </Card>
 
     <Card>
@@ -238,9 +243,11 @@ function PrepTab({ batteryTypes, workers, materials, prepItems, onIssue, onRetur
         ? <div style={{ color:G.t2, fontSize:13, padding:'6px 0' }}>Немає активних видач</div>
         : active.map(p => {
           const avail = +(p.qty - p.returnedQty).toFixed(4)
+          const t = p.typeId === 'ALL' ? { name:'для всіх типів' } : batteryTypes.find(x => x.id === p.typeId)
           return <div key={p.id} style={{ background:G.card2, borderRadius:10, padding:12, marginBottom:8 }}>
             <div style={{ fontWeight:600, fontSize:14 }}>{p.matName}</div>
             <div style={{ fontSize:12, color:G.t2, marginTop:2 }}>{p.workerName} · {p.date}</div>
+            {t && <div style={{ fontSize:11, color:G.t2, marginTop:2 }}>Тип: {t.name}</div>}
             <div style={{ fontSize:13, color:G.pu, margin:'4px 0 8px' }}>На руках: <b>{avail}</b> {p.unit}</div>
             <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
               <input type="number" placeholder="кількість" value={retVals[p.id]||''} onChange={e => setRetVals(v => ({...v,[p.id]:e.target.value}))} style={{ width:100 }} min="0.01" step="0.01" max={avail} />
@@ -326,6 +333,7 @@ function AppInner({ isAdmin, onLogout }) {
   const [log, setLog]                 = useState([])
   const [repairLog, setRepairLog]     = useState([])
   const [prepItems, setPrepItems]     = useState([])
+  const [payments, setPayments]       = useState([])
 
   // ── UI стан ──────────────────────────────────────────────
   const [prodTypeId, setProdTypeId]   = useState('')
@@ -340,7 +348,7 @@ function AppInner({ isAdmin, onLogout }) {
   const [rsVals, setRsVals]           = useState({})
   const [editShopId, setEditShopId]   = useState(null)
   const [editShopVal, setEditShopVal] = useState('')
-  const [newGlobalMat, setNewGlobalMat] = useState({ name:'', unit:'', stock:'', minStock:'', shopUrl:'' })
+  const [newGlobalMat, setNewGlobalMat] = useState({ name:'', unit:'', stock:'', minStock:'', shopUrl:'', photoUrl:'' })
   // PageStock — конфігурація типу (підтаб 'types')
   const [configTypeId, setConfigTypeId] = useState('')
   const [newTmMatId, setNewTmMatId]     = useState('')
@@ -405,6 +413,7 @@ function AppInner({ isAdmin, onLogout }) {
         setLog(data.log || [])
         setRepairLog(data.repairLog || [])
         setPrepItems(data.prepItems || [])
+        setPayments(data.payments || [])
         if (data.batteryTypes?.length) {
           setProdTypeId(data.batteryTypes[0].id)
           setConfigTypeId(data.batteryTypes[0].id)
@@ -424,6 +433,13 @@ function AppInner({ isAdmin, onLogout }) {
   const configType = batteryTypes.find(t => t.id===configTypeId) || batteryTypes[0]
   const perDay     = Math.max(1, workers.filter(w => w.id!=='TEAM_SHARED').length) * 1.5
   const activePrep = prepItems.filter(p => p.status!=='returned')
+  const perBatteryByMat = useMemo(() => {
+    const map = {}
+    typeMaterials.forEach(tm => {
+      map[tm.matId] = (map[tm.matId] || 0) + (parseFloat(tm.perBattery) || 0)
+    })
+    return map
+  }, [typeMaterials])
 
   // ── Хелпер: знайти глобальний мат за matId ───────────────
   const globalMat = (matId) => materials.find(m => m.id===matId)
@@ -431,8 +447,8 @@ function AppInner({ isAdmin, onLogout }) {
   // ── Розрахунок витрат (глобальний склад) ─────────────────
   const buildConsumed = useCallback((type, workerId, qty) => {
     if (!type) return []
-    const myPrep   = prepItems.filter(p => p.workerId===workerId && p.typeId===type.id && p.status!=='returned')
-    const teamPrep = prepItems.filter(p => p.workerId==='TEAM_SHARED' && p.typeId===type.id && p.status!=='returned')
+    const myPrep   = prepItems.filter(p => p.workerId===workerId && (p.typeId===type.id || p.typeId==='ALL') && p.status!=='returned')
+    const teamPrep = prepItems.filter(p => p.workerId==='TEAM_SHARED' && (p.typeId===type.id || p.typeId==='ALL') && p.status!=='returned')
 
     const tms = typeMaterials.filter(tm => tm.typeId===type.id)
     return tms.map(tm => {
@@ -454,7 +470,6 @@ function AppInner({ isAdmin, onLogout }) {
   const updateGlobalStock = useCallback((matId, delta) => {
     setMaterials(prev => prev.map(m => m.id!==matId ? m : {...m, stock:Math.max(0, +(m.stock+delta).toFixed(4))}))
   }, [])
-
   // ════════════════════════════════════════════════════════
   //  ACTIONS
   // ════════════════════════════════════════════════════════
@@ -478,7 +493,7 @@ function AppInner({ isAdmin, onLogout }) {
       </div>,
       async () => {
         closeModal()
-        const entry = { id:uid(), datetime:nowStr(), date:prodDate, typeId:type.id, typeName:type.name, workerName:worker.name, count:prodQty, serials, consumed, kind:'production', repairNote:'' }
+        const entry = { id:uid(), datetime:nowStr(), date:prodDate, typeId:type.id, typeName:type.name, workerId:worker.id, workerName:worker.name, count:prodQty, serials, consumed, kind:'production', repairNote:'' }
         try {
           await api('writeOff', [entry])
           // Оновлюємо глобальний stock
@@ -490,7 +505,7 @@ function AppInner({ isAdmin, onLogout }) {
               const deduct = (wId, amt) => {
                 if (!amt) return
                 let rem = amt
-                next.filter(p => p.workerId===wId && p.typeId===type.id && p.matId===c.matId && p.status!=='returned').forEach(p => {
+                next.filter(p => p.workerId===wId && (p.typeId===type.id || p.typeId==='ALL') && p.matId===c.matId && p.status!=='returned').forEach(p => {
                   if (rem<=0) return
                   const avail = p.qty-p.returnedQty
                   const use = Math.min(avail, rem)
@@ -745,7 +760,6 @@ function AppInner({ isAdmin, onLogout }) {
       {prodTab==='assembly' && <AssemblyTab />}
     </>)
   }
-
   // ── Склад ─────────────────────────────────────────────────
   const PageStock = () => {
     const filteredMats = materials.filter(m => !stockSearch || m.name.toLowerCase().includes(stockSearch.toLowerCase()))
@@ -772,7 +786,7 @@ function AppInner({ isAdmin, onLogout }) {
       })
 
       const editField = (m, field) => {
-        const labels = { name:'Нова назва:', minStock:'Мін. запас:', shopUrl:'Посилання на магазин:', unit:'Одиниця виміру:' }
+        const labels = { name:'Нова назва:', minStock:'Мін. запас:', shopUrl:'Посилання на магазин:', unit:'Одиниця виміру:', photoUrl:'Посилання на фото:' }
         openInput(labels[field]||field, String(m[field]||''), String(m[field]||''), async (val) => {
           closeModal()
           const value = ['minStock'].includes(field) ? parseFloat(val)||0 : val.trim()
@@ -798,12 +812,12 @@ function AppInner({ isAdmin, onLogout }) {
       }
 
       const addMat = async () => {
-        const {name,unit,stock,minStock,shopUrl} = newGlobalMat
+        const {name,unit,stock,minStock,shopUrl,photoUrl} = newGlobalMat
         if (!name||!unit) return showToast("Назва і одиниця — обов'язкові",'err')
-        const res = await api('addMaterial', [name, unit, parseFloat(stock)||0, shopUrl||''])
-        const nm = {id:res.id, name, unit, stock:parseFloat(stock)||0, minStock:parseFloat(minStock)||0, shopUrl:shopUrl||'', isOrdered:false}
+        const res = await api('addMaterial', [name, unit, parseFloat(stock)||0, parseFloat(minStock)||0, shopUrl||'', photoUrl||''])
+        const nm = {id:res.id, name, unit, stock:parseFloat(stock)||0, minStock:parseFloat(minStock)||0, shopUrl:shopUrl||'', photoUrl:photoUrl||'', isOrdered:false}
         setMaterials(prev => [...prev, nm])
-        setNewGlobalMat({name:'',unit:'',stock:'',minStock:'',shopUrl:''})
+        setNewGlobalMat({name:'',unit:'',stock:'',minStock:'',shopUrl:'',photoUrl:''})
         setNewTmMatId(res.id)
         showToast('✓ Додано '+name)
       }
@@ -811,7 +825,10 @@ function AppInner({ isAdmin, onLogout }) {
       if (!isAdmin) return <>
         <input placeholder="🔍 Пошук матеріалу..." value={stockSearch} onChange={e => setStockSearch(e.target.value)} style={{ marginBottom:10 }} />
         {filteredMats.map(m => <div key={m.id} style={{ background:G.card, border:`1px solid ${G.b1}`, borderRadius:12, padding:12, marginBottom:8 }}>
-          <div style={{ fontSize:14, fontWeight:600, marginBottom:6 }}>{m.name}</div>
+          <div style={{ display:'flex', gap:10, alignItems:'center', marginBottom:6 }}>
+            {m.photoUrl && <img src={m.photoUrl} alt={m.name} style={{ width:44, height:44, borderRadius:8, objectFit:'cover', border:`1px solid ${G.b1}` }} />}
+            <div style={{ fontSize:14, fontWeight:600 }}>{m.name}</div>
+          </div>
           <div style={{ display:'flex', gap:6, flexWrap:'wrap', alignItems:'center' }}>
             <StockBadge m={m} />
             <span style={{ background:G.card2, border:`1px solid ${G.b1}`, borderRadius:6, padding:'2px 8px', fontSize:13, color:G.cy, fontWeight:700 }}>{m.stock} {m.unit}</span>
@@ -828,9 +845,12 @@ function AppInner({ isAdmin, onLogout }) {
           const inPrep = prepItems.filter(p => p.matId===m.id && p.status!=='returned').reduce((s,p) => +(s+p.qty-p.returnedQty).toFixed(4), 0)
           return <div key={m.id} style={{ background:G.card, border:`1px solid ${G.b1}`, borderRadius:12, padding:12, marginBottom:8 }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8, marginBottom:6 }}>
-              <div style={{ flex:1 }}>
-                <div onClick={() => editField(m,'name')} style={{ fontSize:14, fontWeight:600, cursor:'pointer', color:G.t1 }}>{m.name}</div>
-                <div style={{ fontSize:11, color:G.t2, marginTop:2 }} onClick={() => editField(m,'unit')} style={{ cursor:'pointer', fontSize:11, color:G.t2, marginTop:2 }}>{m.unit}</div>
+              <div style={{ flex:1, display:'flex', gap:10 }}>
+                {m.photoUrl && <img src={m.photoUrl} alt={m.name} style={{ width:44, height:44, borderRadius:8, objectFit:'cover', border:`1px solid ${G.b1}` }} />}
+                <div>
+                  <div onClick={() => editField(m,'name')} style={{ fontSize:14, fontWeight:600, cursor:'pointer', color:G.t1 }}>{m.name}</div>
+                  <div onClick={() => editField(m,'unit')} style={{ cursor:'pointer', fontSize:11, color:G.t2, marginTop:2 }}>{m.unit}</div>
+                </div>
               </div>
               <div style={{ display:'flex', gap:4, flexShrink:0 }}>
                 <button onClick={() => showHist(m)} style={{ background:G.card2, border:`1px solid ${G.b1}`, color:G.pu, padding:'3px 8px', borderRadius:6, fontSize:11, cursor:'pointer' }}>📊</button>
@@ -854,7 +874,8 @@ function AppInner({ isAdmin, onLogout }) {
             ) : (
               <div style={{ marginBottom:8 }}>
                 {m.shopUrl ? <a href={m.shopUrl} target="_blank" rel="noreferrer" style={{ fontSize:11, color:G.cy, textDecoration:'none', marginRight:8 }}>🔗 Магазин</a> : null}
-                <span onClick={() => {setEditShopId(m.id);setEditShopVal(m.shopUrl||'')}} style={{ fontSize:11, color:G.t2, cursor:'pointer' }}>{m.shopUrl?'✎':'+ посилання'}</span>
+                <span onClick={() => {setEditShopId(m.id);setEditShopVal(m.shopUrl||'')}} style={{ fontSize:11, color:G.t2, cursor:'pointer', marginRight:8 }}>{m.shopUrl?'✎':'+ посилання'}</span>
+                <span onClick={() => editField(m,'photoUrl')} style={{ fontSize:11, color:G.t2, cursor:'pointer' }}>{m.photoUrl?'📷 змінити фото':'+ фото'}</span>
               </div>
             )}
 
@@ -878,6 +899,9 @@ function AppInner({ isAdmin, onLogout }) {
             <div><Label>МІН. ЗАПАС</Label><input type="number" placeholder="0" value={newGlobalMat.minStock} onChange={e => setNewGlobalMat(v => ({...v,minStock:e.target.value}))} /></div>
             <div><Label>ПОСИЛАННЯ</Label><input placeholder="https://..." value={newGlobalMat.shopUrl} onChange={e => setNewGlobalMat(v => ({...v,shopUrl:e.target.value}))} /></div>
           </div>
+          <FormRow label="ФОТО (URL)">
+            <input placeholder="https://..." value={newGlobalMat.photoUrl} onChange={e => setNewGlobalMat(v => ({...v,photoUrl:e.target.value}))} />
+          </FormRow>
           <SubmitBtn onClick={addMat} color={G.gn}>+ ДОДАТИ НА СКЛАД</SubmitBtn>
         </Card>}
       </>
@@ -996,8 +1020,6 @@ function AppInner({ isAdmin, onLogout }) {
     const TabAssemblies = () => {
       if (!isAdmin) return <div style={{ color:G.t2, fontSize:13, padding:20, textAlign:'center' }}>Доступно тільки адміну</div>
 
-      const curEditAsm = assemblies.find(a => a.id===editAsmId)
-
       const createAsm = async () => {
         if (!newAsmName||!newAsmOutMatId||!newAsmOutQty) return showToast("Назва, матеріал і кількість — обов'язкові",'err')
         const gm = globalMat(newAsmOutMatId)
@@ -1111,7 +1133,6 @@ function AppInner({ isAdmin, onLogout }) {
       {stockTab==='materials' ? TabMaterials() : stockTab==='types' ? TabTypes() : TabAssemblies()}
     </>)
   }
-
   // ── Ремонт ────────────────────────────────────────────────
   const PageRepair = () => {
     const serial   = repairSerial
@@ -1266,7 +1287,11 @@ function AppInner({ isAdmin, onLogout }) {
 
   // ── Закупівля ─────────────────────────────────────────────
   const PageShopping = () => {
-    const lowMats = materials.filter(m => m.stock <= m.minStock || m.stock===0)
+    const lowMats = materials.filter(m => {
+      const perBattery = perBatteryByMat[m.id] || 0
+      const monthNeed = perBattery>0 ? (perBattery * perDay * 30) : (m.minStock || 0)
+      return m.stock <= m.minStock || m.stock < monthNeed || m.stock===0
+    })
 
     const setOrdered = async (mat, status) => {
       await api('updateMaterialField', [mat.id, 'isOrdered', status])
@@ -1276,7 +1301,13 @@ function AppInner({ isAdmin, onLogout }) {
     const sendToTg = async () => {
       const pending = lowMats.filter(m => !m.isOrdered)
       if (pending.length===0) return showToast('Немає нових матеріалів для замовлення!','err')
-      const lines = pending.map(m => { const link=m.shopUrl?`\n  🔗 ${m.shopUrl}`:''; return `• ${m.name}: ${m.stock} ${m.unit} (мін: ${m.minStock})${link}` }).join('\n')
+      const lines = pending.map(m => {
+        const perBattery = perBatteryByMat[m.id] || 0
+        const monthNeed = perBattery>0 ? +(perBattery * perDay * 30).toFixed(2) : (m.minStock || 0)
+        const toOrder = Math.max(0, +(monthNeed - m.stock).toFixed(2))
+        const link=m.shopUrl?`\n  🔗 ${m.shopUrl}`:''
+        return `• ${m.name}: ${m.stock} ${m.unit} (мін: ${m.minStock}) · потрібно/міс: ${monthNeed} · докупити: ${toOrder}${link}`
+      }).join('\n')
       await sendTelegram(`🛒 ZmiyCell — Закупівля\n\n${lines}`)
       showToast('✓ Відправлено в Telegram')
       for (const m of pending) await setOrdered(m, true)
@@ -1289,6 +1320,9 @@ function AppInner({ isAdmin, onLogout }) {
         {lowMats.length===0 ? <Center>Всі матеріали в нормі</Center> :
           lowMats.map(m => {
             const ordered = !!m.isOrdered
+            const perBattery = perBatteryByMat[m.id] || 0
+            const monthNeed = perBattery>0 ? +(perBattery * perDay * 30).toFixed(2) : (m.minStock || 0)
+            const toOrder = Math.max(0, +(monthNeed - m.stock).toFixed(2))
             return <div key={m.id} style={{ background:ordered?G.card:G.card2, border:`1px solid ${G.b1}`, borderRadius:10, padding:12, marginBottom:8, borderLeft:`3px solid ${ordered?G.t2:'#a78bfa'}`, opacity:ordered?.6:1, transition:'0.2s' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
                 <div style={{ flex:1 }}>
@@ -1298,6 +1332,9 @@ function AppInner({ isAdmin, onLogout }) {
                   {!ordered && <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:8 }}>
                     <span style={{ color:G.or, fontWeight:600 }}>{m.stock} {m.unit}</span>
                     <Chip bg='#450a0a' color={G.rd} bd='#7f1d1d'>мін {m.minStock}</Chip>
+                  </div>}
+                  {!ordered && <div style={{ fontSize:11, color:G.t2, marginTop:6 }}>
+                    Потрібно/міс: <b style={{ color:G.cy }}>{monthNeed}</b> · докупити: <b style={{ color:G.or }}>{toOrder}</b>
                   </div>}
                 </div>
                 <button onClick={() => setOrdered(m, !ordered)} style={{ background:ordered?G.card2:G.b1, border:`1px solid ${G.b2}`, color:ordered?G.t2:G.pu, padding:'4px 8px', borderRadius:6, fontSize:11, cursor:'pointer', flexShrink:0 }}>
@@ -1311,11 +1348,28 @@ function AppInner({ isAdmin, onLogout }) {
       </Card>
     </>)
   }
-
   // ── Команда ───────────────────────────────────────────────
   const PageWorkers = () => {
     const newName = newWorkerName; const setNewName = setNewWorkerName
     const realWorkers = workers.filter(w => w.id!=='TEAM_SHARED')
+    const paidByWorker = useMemo(() => {
+      const map = {}
+      payments.forEach(p => {
+        const key = p.workerId || p.workerName
+        if (!key) return
+        map[key] = (map[key] || 0) + (parseInt(p.count) || 0)
+      })
+      return map
+    }, [payments])
+    const producedByName = useMemo(() => {
+      const map = {}
+      log.filter(l => l.kind==='production').forEach(l => {
+        const key = l.workerName
+        if (!key) return
+        map[key] = (map[key] || 0) + (parseInt(l.count) || 0)
+      })
+      return map
+    }, [log])
 
     const deleteWorker = (w) => openConfirm('Видалити працівника?', <b style={{ color:G.rd }}>{w.name}</b>, () => {
       closeModal()
@@ -1326,14 +1380,40 @@ function AppInner({ isAdmin, onLogout }) {
       const w = {id:'w'+uid(), name:newName.trim()}
       api('saveWorker',[w]).then(() => { setWorkers(p => [...p,w]); setNewName(''); showToast('✓ Додано '+w.name) }).catch(()=>{})
     }
+    const addPayment = (w) => openInput('Оплачено (кількість)', 'напр. 5', '', async (val) => {
+      closeModal()
+      const cnt = parseInt(val)
+      if (!cnt || cnt<=0) return showToast('Невірна кількість','err')
+      const entry = { id:uid(), workerId:w.id, workerName:w.name, count:cnt, date:todayStr(), datetime:nowStr() }
+      try {
+        await api('addPayment', [entry])
+        setPayments(prev => [entry, ...prev])
+        showToast(`✓ Оплачено: ${cnt} для ${w.name}`)
+      } catch {}
+    })
 
     return wrap(<>
       <Card>
         <CardTitle>👷 КОМАНДА ({realWorkers.length})</CardTitle>
-        {realWorkers.map(w => <div key={w.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 0', borderBottom:`1px solid ${G.b1}` }}>
-          <span style={{ fontSize:14 }}>{w.name}</span>
-          {isAdmin && <button onClick={() => deleteWorker(w)} style={{ background:'#450a0a', border:'none', color:G.rd, padding:'4px 10px', borderRadius:8, cursor:'pointer', fontSize:12 }}>✕</button>}
-        </div>)}
+        {realWorkers.map(w => {
+          const produced = producedByName[w.name] || 0
+          const paid = paidByWorker[w.id] || paidByWorker[w.name] || 0
+          const unpaid = Math.max(0, produced - paid)
+          return <div key={w.id} style={{ padding:'10px 0', borderBottom:`1px solid ${G.b1}` }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <span style={{ fontSize:14 }}>{w.name}</span>
+              <div style={{ display:'flex', gap:6 }}>
+                {isAdmin && <button onClick={() => addPayment(w)} style={{ background:'#052e16', border:`1px solid #166534`, color:G.gn, padding:'4px 10px', borderRadius:8, cursor:'pointer', fontSize:12 }}>+ Оплачено</button>}
+                {isAdmin && <button onClick={() => deleteWorker(w)} style={{ background:'#450a0a', border:'none', color:G.rd, padding:'4px 10px', borderRadius:8, cursor:'pointer', fontSize:12 }}>✕</button>}
+              </div>
+            </div>
+            <div style={{ display:'flex', gap:6, marginTop:6, flexWrap:'wrap' }}>
+              <Chip bg={G.card2} color={G.t2} bd={G.b2}>Вироблено: {produced}</Chip>
+              <Chip bg='#052e16' color={G.gn} bd='#166534'>Оплачено: {paid}</Chip>
+              <Chip bg='#431407' color='#fb923c' bd='#9a3412'>Неопл.: {unpaid}</Chip>
+            </div>
+          </div>
+        })}
       </Card>
       {isAdmin && <Card>
         <CardTitle color={G.gn}>+ ДОДАТИ ПРАЦІВНИКА</CardTitle>
