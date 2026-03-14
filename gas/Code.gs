@@ -112,6 +112,7 @@ var ACTIONS = {
   saveWorker:             saveWorker,
   deleteWorker:           deleteWorker,
   addPayment:             addPayment,
+  repairMaterialIds:      repairMaterialIds,
 
   // Інструменти
   saveTool:               saveTool,
@@ -1241,6 +1242,84 @@ function isBatteryTypeId(id) {
     if (String(data[i][0]) === String(id)) return true
   }
   return false
+}
+
+function repairMaterialIds() {
+  return withLock(function() {
+    var ss = SpreadsheetApp.getActiveSpreadsheet()
+    var matSh = ss.getSheetByName(SHEET.MATERIALS)
+    if (!matSh) return { ok:false, error:'Materials не знайдено' }
+    ensureColumn(matSh, 'minStock')
+
+    var matData = matSh.getDataRange().getValues()
+    if (matData.length < 2) return { ok:true, message:'Немає рядків' }
+
+    var idMap = {}
+    for (var i = 1; i < matData.length; i++) {
+      var oldId = String(matData[i][0] || '')
+      var newId = 'mat_' + Date.now() + '_' + i
+      idMap[oldId] = newId
+      matData[i][0] = newId
+    }
+    matSh.getRange(2, 1, matData.length - 1, matData[0].length).setValues(matData.slice(1))
+
+    // Update TypeMaterials
+    var tmSh = ss.getSheetByName(SHEET.TYPE_MATS)
+    if (tmSh) {
+      var tmData = tmSh.getDataRange().getValues()
+      for (var r = 1; r < tmData.length; r++) {
+        var old = String(tmData[r][2] || '')
+        if (idMap[old]) tmData[r][2] = idMap[old]
+      }
+      tmSh.getRange(2,1,tmData.length-1,tmData[0].length).setValues(tmData.slice(1))
+    }
+
+    // Update AssemblyComponents
+    var acSh = ss.getSheetByName(SHEET.ASSEM_COMP)
+    if (acSh) {
+      var acData = acSh.getDataRange().getValues()
+      for (var r2 = 1; r2 < acData.length; r2++) {
+        var old2 = String(acData[r2][2] || '')
+        if (idMap[old2]) acData[r2][2] = idMap[old2]
+      }
+      acSh.getRange(2,1,acData.length-1,acData[0].length).setValues(acData.slice(1))
+    }
+
+    // Update PrepItems
+    var pSh = ss.getSheetByName(SHEET.PREP)
+    if (pSh) {
+      ensureColumn(pSh, 'scope')
+      var pData = pSh.getDataRange().getValues()
+      for (var r3 = 1; r3 < pData.length; r3++) {
+        var old3 = String(pData[r3][4] || '')
+        if (idMap[old3]) pData[r3][4] = idMap[old3]
+      }
+      pSh.getRange(2,1,pData.length-1,pData[0].length).setValues(pData.slice(1))
+    }
+
+    // Update Log consumedJson
+    var logSh = ss.getSheetByName(SHEET.LOG)
+    if (logSh) {
+      var lData = logSh.getDataRange().getValues()
+      for (var r4 = 1; r4 < lData.length; r4++) {
+        var cjson = lData[r4][8]
+        var arr = json(cjson, null)
+        if (arr && arr.length) {
+          var changed = false
+          arr.forEach(function(c) {
+            if (c.matId && idMap[String(c.matId)]) {
+              c.matId = idMap[String(c.matId)]
+              changed = true
+            }
+          })
+          if (changed) lData[r4][8] = JSON.stringify(arr)
+        }
+      }
+      logSh.getRange(2,1,lData.length-1,lData[0].length).setValues(lData.slice(1))
+    }
+
+    return { ok:true, message:'Матеріали перестворені: ' + (matData.length-1) }
+  })
 }
 
 function num(v)       { return parseFloat(v) || 0 }
