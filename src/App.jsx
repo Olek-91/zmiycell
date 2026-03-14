@@ -448,6 +448,27 @@ function AppInner({ isAdmin, onLogout }) {
   // Swipe hint
   const [swipeHint, setSwipeHint] = useState(null)
 
+  // ── Обчислювані дані ──────────────────────────────────────
+  const paidByWorker = useMemo(() => {
+    const map = {}
+    payments.forEach(p => {
+      const key = p.workerId || p.workerName
+      if (!key) return
+      map[key] = (map[key] || 0) + (parseInt(p.count) || 0)
+    })
+    return map
+  }, [payments])
+
+  const producedByName = useMemo(() => {
+    const map = {}
+    log.filter(l => l.kind==='production').forEach(l => {
+      const key = l.workerName
+      if (!key) return
+      map[key] = (map[key] || 0) + (parseInt(l.count) || 0)
+    })
+    return map
+  }, [log])
+
   // ── Хелпери ──────────────────────────────────────────────
   const showToast  = useCallback((msg, type='ok') => { setToast({msg,type}); setTimeout(() => setToast(null), 3500) }, [])
   const openConfirm = useCallback((title, body, onYes) => setModal({type:'confirm',title,body,onYes}), [])
@@ -1596,24 +1617,6 @@ function AppInner({ isAdmin, onLogout }) {
   const PageWorkers = () => {
     const newName = newWorkerName; const setNewName = setNewWorkerName
     const realWorkers = workers
-    const paidByWorker = useMemo(() => {
-      const map = {}
-      payments.forEach(p => {
-        const key = p.workerId || p.workerName
-        if (!key) return
-        map[key] = (map[key] || 0) + (parseInt(p.count) || 0)
-      })
-      return map
-    }, [payments])
-    const producedByName = useMemo(() => {
-      const map = {}
-      log.filter(l => l.kind==='production').forEach(l => {
-        const key = l.workerName
-        if (!key) return
-        map[key] = (map[key] || 0) + (parseInt(l.count) || 0)
-      })
-      return map
-    }, [log])
 
     const deleteWorker = (w) => openConfirm('Видалити працівника?', <b style={{ color:G.rd }}>{w.name}</b>, () => {
       closeModal()
