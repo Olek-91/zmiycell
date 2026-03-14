@@ -1636,7 +1636,7 @@ function AppInner({ isAdmin, onLogout }) {
       } catch {}
     })
 
-    return wrap(<>
+    return <>
       <Card>
         <CardTitle>👷 КОМАНДА ({realWorkers.length})</CardTitle>
         {realWorkers.map(w => {
@@ -1666,7 +1666,7 @@ function AppInner({ isAdmin, onLogout }) {
           <button onClick={addWorker} style={{ padding:'8px 16px', background:G.gn, color:'#000', border:'none', borderRadius:8, fontWeight:700, fontSize:13, cursor:'pointer', whiteSpace:'nowrap' }}>+ ДОДАТИ</button>
         </div>
       </Card>}
-    </>)
+    </>
   }
 
   // ── Інструменти ───────────────────────────────────────────
