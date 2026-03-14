@@ -199,14 +199,16 @@ function AuthScreen({ onAuth }) {
 // ════════════════════════════════════════════════════════
 //  PrepTab — використовує глобальні матеріали
 // ════════════════════════════════════════════════════════
-function PrepTab({ batteryTypes, workers, materials, prepItems, onIssue, onReturn }) {
+function PrepTab({ batteryTypes, workers, assemblies, materials, prepItems, onIssueAssembly, onReturn, onChangeScope, isAdmin }) {
   const [wId, setWId]         = useState(workers[0]?.id || '')
   const [typeId, setTypeId]   = useState(batteryTypes[0]?.id || '')
-  const [matId, setMatId]     = useState('')
+  const [asmId, setAsmId]     = useState('')
   const [qty, setQty]         = useState(1)
   const [allTypes, setAllTypes] = useState(false)
+  const [forAll, setForAll]   = useState(false)
   const [retVals, setRetVals] = useState({})
   const active = prepItems.filter(p => p.status !== 'returned')
+  const asm = assemblies.find(a => a.id===asmId)
 
   return <>
     <Card>
@@ -225,16 +227,34 @@ function PrepTab({ batteryTypes, workers, materials, prepItems, onIssue, onRetur
         <input id="prep-all-types" type="checkbox" checked={allTypes} onChange={e => setAllTypes(e.target.checked)} />
         <label htmlFor="prep-all-types" style={{ fontSize:12, color:G.t2 }}>Для всіх типів</label>
       </div>
-      <FormRow label="МАТЕРІАЛ">
-        <select value={matId} onChange={e => setMatId(e.target.value)}>
-          <option value="">— оберіть матеріал —</option>
-          {materials.map(m => <option key={m.id} value={m.id}>{m.name} ({m.stock} {m.unit})</option>)}
+      <FormRow label="ЗАГОТОВКА (ЗБІРКА)">
+        <select value={asmId} onChange={e => setAsmId(e.target.value)}>
+          <option value="">— оберіть збірку —</option>
+          {assemblies.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
         </select>
       </FormRow>
       <FormRow label="КІЛЬКІСТЬ">
         <input type="number" value={qty} onChange={e => setQty(parseFloat(e.target.value)||1)} min="0.01" step="0.01" />
       </FormRow>
-      <SubmitBtn color={G.pu} onClick={() => onIssue(wId, matId, qty, allTypes ? 'ALL' : typeId)}>📦 ВИДАТИ</SubmitBtn>
+      <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
+        <input id="prep-for-all" type="checkbox" checked={forAll} onChange={e => setForAll(e.target.checked)} />
+        <label htmlFor="prep-for-all" style={{ fontSize:12, color:G.t2 }}>Для всіх працівників</label>
+      </div>
+      {asm && asm.components.length>0 && (
+        <div style={{ background:G.b1, borderRadius:8, padding:'8px 10px', marginBottom:10 }}>
+          <div style={{ fontSize:11, color:G.t2, marginBottom:6, fontWeight:700 }}>КОМПОНЕНТИ (на {qty} шт)</div>
+          {asm.components.map(ac => {
+            const gm = materials.find(m => m.id===ac.matId)
+            const need = +(ac.qty * qty).toFixed(4)
+            const ok = gm && gm.stock >= need
+            return <div key={ac.id} style={{ display:'flex', justifyContent:'space-between', fontSize:12, padding:'2px 0', color:ok?G.t1:G.rd }}>
+              <span>{gm?.name||ac.matId}</span>
+              <span>{need} {gm?.unit||''} <span style={{ color:ok?G.t2:G.rd }}>(є: {gm?.stock??'?'})</span></span>
+            </div>
+          })}
+        </div>
+      )}
+      <SubmitBtn color={G.pu} onClick={() => onIssueAssembly(wId, asmId, qty, allTypes ? 'ALL' : typeId, forAll)}>📦 ВИДАТИ</SubmitBtn>
     </Card>
 
     <Card>
@@ -248,11 +268,13 @@ function PrepTab({ batteryTypes, workers, materials, prepItems, onIssue, onRetur
             <div style={{ fontWeight:600, fontSize:14 }}>{p.matName}</div>
             <div style={{ fontSize:12, color:G.t2, marginTop:2 }}>{p.workerName} · {p.date}</div>
             {t && <div style={{ fontSize:11, color:G.t2, marginTop:2 }}>Тип: {t.name}</div>}
+            <div style={{ fontSize:12, color:G.t2, marginTop:2 }}>Доступ: {p.scope==='all'?'для всіх':'особисто'}</div>
             <div style={{ fontSize:13, color:G.pu, margin:'4px 0 8px' }}>На руках: <b>{avail}</b> {p.unit}</div>
             <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
               <input type="number" placeholder="кількість" value={retVals[p.id]||''} onChange={e => setRetVals(v => ({...v,[p.id]:e.target.value}))} style={{ width:100 }} min="0.01" step="0.01" max={avail} />
               <button onClick={() => onReturn(p.id, false, retVals[p.id])} style={{ padding:'7px 10px', background:'#1e1b4b', color:G.pu, border:`1px solid #3730a3`, borderRadius:8, fontSize:12, cursor:'pointer', fontFamily:"'Fira Code',monospace", fontWeight:600 }}>↩ Частково</button>
               <button onClick={() => onReturn(p.id, true)} style={{ padding:'7px 10px', background:'#052e16', color:G.gn, border:`1px solid #166534`, borderRadius:8, fontSize:12, cursor:'pointer', fontFamily:"'Fira Code',monospace", fontWeight:600 }}>↩↩ Все</button>
+              {isAdmin && <button onClick={() => onChangeScope(p.id, p.scope==='all'?'self':'all')} style={{ padding:'7px 10px', background:G.b1, color:G.t2, border:`1px solid ${G.b2}`, borderRadius:8, fontSize:11, cursor:'pointer', fontFamily:"'Fira Code',monospace", fontWeight:600 }}>⇆ {p.scope==='all'?'в особисті':'для всіх'}</button>}
             </div>
           </div>
         })}
@@ -407,7 +429,6 @@ function AppInner({ isAdmin, onLogout }) {
         setAssemblies(data.assemblies || [])
         setBatteryTypes(data.batteryTypes || [])
         const wks = data.workers || []
-        if (!wks.find(w => w.id==='TEAM_SHARED')) wks.unshift({id:'TEAM_SHARED', name:'🤝 СПІЛЬНИЙ СТІЛ (Команда)'})
         setWorkers(wks)
         setTools(data.tools || [])
         setLog(data.log || [])
@@ -423,6 +444,7 @@ function AppInner({ isAdmin, onLogout }) {
         if (wks.length > 1) { setProdWorker(wks[1].id); setRepWorker(wks[1].id); setManWorkerId(wks[1].id); setToolRepairWorker(wks[1].id); setAsmWorker(wks[1].id) }
         else if (wks.length > 0) { setProdWorker(wks[0].id); setRepWorker(wks[0].id); setManWorkerId(wks[0].id); setToolRepairWorker(wks[0].id); setAsmWorker(wks[0].id) }
         if (mats.length) { setNewTmMatId(mats[0].id); setNewAsmOutMatId(mats[0].id); setNewAcMatId(mats[0].id) }
+        if (data.assemblies?.length) setAsmId(data.assemblies[0].id)
         setSync('ok')
       })
       .catch(() => { setSync('error'); showToast('Не вдалось завантажити дані.','err') })
@@ -431,7 +453,7 @@ function AppInner({ isAdmin, onLogout }) {
   // ── Похідні дані ─────────────────────────────────────────
   const prodType   = batteryTypes.find(t => t.id===prodTypeId) || batteryTypes[0]
   const configType = batteryTypes.find(t => t.id===configTypeId) || batteryTypes[0]
-  const perDay     = Math.max(1, workers.filter(w => w.id!=='TEAM_SHARED').length) * 1.5
+  const perDay     = Math.max(1, workers.length) * 1.5
   const activePrep = prepItems.filter(p => p.status!=='returned')
   const perBatteryByMat = useMemo(() => {
     const map = {}
@@ -447,8 +469,8 @@ function AppInner({ isAdmin, onLogout }) {
   // ── Розрахунок витрат (глобальний склад) ─────────────────
   const buildConsumed = useCallback((type, workerId, qty) => {
     if (!type) return []
-    const myPrep   = prepItems.filter(p => p.workerId===workerId && (p.typeId===type.id || p.typeId==='ALL') && p.status!=='returned')
-    const teamPrep = prepItems.filter(p => p.workerId==='TEAM_SHARED' && (p.typeId===type.id || p.typeId==='ALL') && p.status!=='returned')
+    const myPrep   = prepItems.filter(p => p.workerId===workerId && p.scope!=='all' && (p.typeId===type.id || p.typeId==='ALL') && p.status!=='returned')
+    const allPrep  = prepItems.filter(p => p.scope==='all' && (p.typeId===type.id || p.typeId==='ALL') && p.status!=='returned')
 
     const tms = typeMaterials.filter(tm => tm.typeId===type.id)
     return tms.map(tm => {
@@ -459,8 +481,8 @@ function AppInner({ isAdmin, onLogout }) {
       const pAvail = myPrep.filter(p => p.matId===tm.matId).reduce((s,p) => +(s+p.qty-p.returnedQty).toFixed(4), 0)
       const fromPersonal = +Math.min(pAvail, need).toFixed(4)
       need = +(need - fromPersonal).toFixed(4)
-      const tAvail = teamPrep.filter(p => p.matId===tm.matId).reduce((s,p) => +(s+p.qty-p.returnedQty).toFixed(4), 0)
-      const fromTeam = +Math.min(tAvail, need).toFixed(4)
+      const aAvail = allPrep.filter(p => p.matId===tm.matId).reduce((s,p) => +(s+p.qty-p.returnedQty).toFixed(4), 0)
+      const fromTeam = +Math.min(aAvail, need).toFixed(4)
       need = +(need - fromTeam).toFixed(4)
       return { matId:tm.matId, name:gm.name, unit:gm.unit, amount:needOrig, fromPersonal, fromTeam, fromStock:need, totalStock:gm.stock }
     }).filter(Boolean)
@@ -536,25 +558,62 @@ function AppInner({ isAdmin, onLogout }) {
     )
   }
 
-  const doIssuePrep = (workerId, matId, qty, typeId) => {
+  const doIssuePrepAssembly = (workerId, assemblyId, qty, typeId, forAll) => {
     const worker = workers.find(w => w.id===workerId)
-    const mat    = materials.find(m => m.id===matId)
-    if (!mat || !worker || !qty || qty<=0) return showToast("Заповніть всі поля", 'err')
-    if (mat.stock < qty) return showToast('Не вистачає: '+mat.name, 'err')
+    const asm = assemblies.find(a => a.id===assemblyId)
+    if (!asm || !worker || !qty || qty<=0) return showToast("Заповніть всі поля", 'err')
+    if (!asm.components || asm.components.length===0) return showToast('Збірка без компонентів', 'err')
+
+    const items = asm.components.map(ac => {
+      const gm = materials.find(m => m.id===ac.matId)
+      return {
+        id: uid(),
+        workerId: worker.id,
+        workerName: worker.name,
+        typeId,
+        matId: ac.matId,
+        matName: gm?.name || ac.matId,
+        unit: gm?.unit || '',
+        qty: +(ac.qty * qty).toFixed(4),
+        returnedQty: 0,
+        date: todayStr(),
+        datetime: nowStr(),
+        status: 'active',
+        scope: forAll ? 'all' : 'self',
+      }
+    })
+
+    const shortage = items.find(it => {
+      const gm = materials.find(m => m.id===it.matId)
+      return !gm || gm.stock < it.qty
+    })
+    if (shortage) return showToast('Не вистачає: '+shortage.matName, 'err')
 
     openConfirm('Видача на заготовку',
-      <div style={{ fontSize:13, color:G.t2, lineHeight:1.8 }}><b style={{ color:G.t1 }}>{mat.name}</b><br/>Кількість: {qty} {mat.unit}<br/>Працівник: {worker.name}</div>,
+      <div style={{ fontSize:13, color:G.t2, lineHeight:1.8 }}>
+        <b style={{ color:G.t1 }}>{asm.name}</b><br/>
+        Кількість: {qty} шт<br/>
+        Працівник: {worker.name}<br/>
+        Доступ: {forAll?'для всіх':'особисто'}
+      </div>,
       async () => {
         closeModal()
-        const item = { id:uid(), workerId:worker.id, workerName:worker.name, typeId, matId:mat.id, matName:mat.name, unit:mat.unit, qty, returnedQty:0, date:todayStr(), datetime:nowStr(), status:'active' }
         try {
-          await api('addPrepItem', [item])
-          updateGlobalStock(mat.id, -qty)
-          setPrepItems(prev => [item, ...prev])
-          showToast(`✓ Видано ${qty} ${mat.unit} → ${worker.name}`)
+          await api('addPrepItemsBatch', [items])
+          items.forEach(it => updateGlobalStock(it.matId, -it.qty))
+          setPrepItems(prev => [...items, ...prev])
+          showToast(`✓ Видано заготовку: ${asm.name}`)
         } catch {}
       }
     )
+  }
+
+  const doChangePrepScope = async (prepId, scope) => {
+    try {
+      await api('updatePrepField', [prepId, 'scope', scope])
+      setPrepItems(prev => prev.map(p => String(p.id)===String(prepId) ? {...p, scope} : p))
+      showToast('✓ Оновлено доступ')
+    } catch {}
   }
 
   const doReturnPrep = async (prepId, all, customQty) => {
@@ -756,7 +815,17 @@ function AppInner({ isAdmin, onLogout }) {
         <SubmitBtn onClick={doWriteoff}>✓ СПИСАТИ МАТЕРІАЛИ</SubmitBtn>
         <div style={{ height:16 }} />
       </>}
-      {prodTab==='prep' && <PrepTab batteryTypes={batteryTypes} workers={workers} materials={materials} prepItems={prepItems} onIssue={doIssuePrep} onReturn={doReturnPrep} />}
+      {prodTab==='prep' && <PrepTab
+        batteryTypes={batteryTypes}
+        workers={workers}
+        assemblies={assemblies}
+        materials={materials}
+        prepItems={prepItems}
+        onIssueAssembly={doIssuePrepAssembly}
+        onReturn={doReturnPrep}
+        onChangeScope={doChangePrepScope}
+        isAdmin={isAdmin}
+      />}
       {prodTab==='assembly' && <AssemblyTab />}
     </>)
   }
@@ -1351,7 +1420,7 @@ function AppInner({ isAdmin, onLogout }) {
   // ── Команда ───────────────────────────────────────────────
   const PageWorkers = () => {
     const newName = newWorkerName; const setNewName = setNewWorkerName
-    const realWorkers = workers.filter(w => w.id!=='TEAM_SHARED')
+    const realWorkers = workers
     const paidByWorker = useMemo(() => {
       const map = {}
       payments.forEach(p => {

@@ -97,6 +97,8 @@ var ACTIONS = {
   // Виробництво / ремонт / заготовка
   writeOff:               writeOff,
   addPrepItem:            addPrepItem,
+  addPrepItemsBatch:      addPrepItemsBatch,
+  updatePrepField:        updatePrepField,
   returnPrep:             returnPrep,
   addRepair:              addRepair,
   returnRepairMaterials:  returnRepairMaterials,
@@ -208,9 +210,10 @@ function initSheets() {
   )
 
   ensureSheet(ss, SHEET.PREP,
-    ['id','workerId','workerName','typeId','matId','matName','unit','qty','returnedQty','date','datetime','status'],
+    ['id','workerId','workerName','typeId','matId','matName','unit','qty','returnedQty','date','datetime','status','scope'],
     []
   )
+  ensureColumn(ss.getSheetByName(SHEET.PREP), 'scope')
   ensureSheet(ss, SHEET.PAYMENTS,
     ['id','workerId','workerName','count','date','datetime'],
     []
@@ -499,7 +502,7 @@ function loadAll() {
       }
     }).reverse(),
 
-    prepItems: pRows.map(function(r) {
+  prepItems: pRows.map(function(r) {
       return {
         id:          r.id,
         workerId:    r.workerId,
@@ -513,6 +516,7 @@ function loadAll() {
         date:        r.date,
         datetime:    r.datetime,
         status:      r.status || 'active',
+        scope:       r.scope || 'self',
       }
     }),
     payments: payRows.map(function(r) {
@@ -782,6 +786,10 @@ function deductPrep(ss, workerName, typeId, matId, needed) {
       String(data[i][4]) === String(matId) &&
       data[i][11] !== 'returned'
     ) {
+      var scope = data[i][12] || 'self'
+      if (scope === 'all') {
+        // дозволено
+      }
       var qty   = +data[i][7] || 0
       var ret   = +data[i][8] || 0
       var avail = +(qty - ret).toFixed(4)
@@ -801,11 +809,12 @@ function deductPrepByWorkerId(ss, workerId, typeId, matId, needed) {
   var rem  = needed
   for (var i = 1; i < data.length && rem > 0; i++) {
     if (
-      data[i][1]  === workerId &&
       (data[i][3]  === typeId || data[i][3] === 'ALL') &&
       String(data[i][4]) === String(matId) &&
       data[i][11] !== 'returned'
     ) {
+      var scope = data[i][12] || 'self'
+      if (scope !== 'all' && String(data[i][1]) !== String(workerId)) continue
       var qty   = +data[i][7] || 0
       var ret   = +data[i][8] || 0
       var avail = +(qty - ret).toFixed(4)
@@ -827,6 +836,8 @@ function addPrepItem(item) {
     var ss      = SpreadsheetApp.getActiveSpreadsheet()
     var matSh   = ss.getSheetByName(SHEET.MATERIALS)
     var matData = matSh.getDataRange().getValues()
+    var prepSh  = ss.getSheetByName(SHEET.PREP)
+    ensureColumn(prepSh, 'scope')
 
     for (var i = 1; i < matData.length; i++) {
       if (String(matData[i][0]) === String(item.matId)) {
@@ -837,11 +848,11 @@ function addPrepItem(item) {
       }
     }
 
-    ss.getSheetByName(SHEET.PREP).appendRow([
+    prepSh.appendRow([
       item.id, item.workerId, item.workerName,
       item.typeId, item.matId, item.matName,
       item.unit, item.qty, 0,
-      item.date, item.datetime, 'active',
+      item.date, item.datetime, 'active', item.scope || 'self',
     ])
 
     ss.getSheetByName(SHEET.LOG).appendRow([
@@ -851,6 +862,60 @@ function addPrepItem(item) {
       JSON.stringify([{ name: item.matName, unit: item.unit, amount: item.qty }]),
       'prep', '',
     ])
+
+    return { ok: true }
+  })
+}
+
+function addPrepItemsBatch(items) {
+  return withLock(function() {
+    if (!items || !items.length) return { ok: false, error: 'Немає даних' }
+    var ss      = SpreadsheetApp.getActiveSpreadsheet()
+    var matSh   = ss.getSheetByName(SHEET.MATERIALS)
+    var matData = matSh.getDataRange().getValues()
+    var prepSh  = ss.getSheetByName(SHEET.PREP)
+    ensureColumn(prepSh, 'scope')
+
+    // Перевірка залишків
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i]
+      var ok = false
+      for (var r = 1; r < matData.length; r++) {
+        if (String(matData[r][0]) === String(it.matId)) {
+          ok = true
+          var cur = +matData[r][3] || 0
+          if (cur < it.qty) return { ok: false, error: 'Не вистачає матеріалу на складі: ' + it.matName }
+          break
+        }
+      }
+      if (!ok) return { ok: false, error: 'Матеріал не знайдено: ' + it.matId }
+    }
+
+    // Списуємо зі складу і додаємо у заготовки
+    items.forEach(function(it) {
+      for (var r = 1; r < matData.length; r++) {
+        if (String(matData[r][0]) === String(it.matId)) {
+          var cur = +matData[r][3] || 0
+          var nv = +(cur - it.qty).toFixed(4)
+          matSh.getRange(r + 1, 4).setValue(nv)
+          matData[r][3] = nv
+          break
+        }
+      }
+      prepSh.appendRow([
+        it.id, it.workerId, it.workerName,
+        it.typeId, it.matId, it.matName,
+        it.unit, it.qty, 0,
+        it.date, it.datetime, 'active', it.scope || 'self',
+      ])
+      ss.getSheetByName(SHEET.LOG).appendRow([
+        it.id + 'P', it.datetime, it.date,
+        it.typeId, '', it.workerName,
+        0, '',
+        JSON.stringify([{ name: it.matName, unit: it.unit, amount: it.qty }]),
+        'prep', '',
+      ])
+    })
 
     return { ok: true }
   })
@@ -883,6 +948,26 @@ function returnPrep(prepId, returnQty) {
         }
       }
       return { ok: true }
+    }
+    return { ok: false, error: 'Запис не знайдено' }
+  })
+}
+
+function updatePrepField(prepId, field, value) {
+  return withLock(function() {
+    var ss   = SpreadsheetApp.getActiveSpreadsheet()
+    var sh   = ss.getSheetByName(SHEET.PREP)
+    if (!sh) return { ok: false, error: 'Таблиця PrepItems не знайдена' }
+    ensureColumn(sh, 'scope')
+    var data = sh.getDataRange().getValues()
+    var headers = data[0]
+    var col = headers.indexOf(field)
+    if (col < 0) return { ok:false, error:'Невідоме поле: '+field }
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(prepId)) {
+        sh.getRange(i + 1, col + 1).setValue(value)
+        return { ok: true }
+      }
     }
     return { ok: false, error: 'Запис не знайдено' }
   })
