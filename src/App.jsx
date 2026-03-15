@@ -1321,8 +1321,8 @@ function AppInner({ isAdmin, onLogout }) {
                   }} style={{ width:18, height:18, accentColor:'#a78bfa', cursor:'pointer', flexShrink:0 }} />
                   <div style={{ flex:1, color:checked?G.t1:G.t2 }}>{m.name}</div>
                   {checked && <div style={{ display:'flex', alignItems:'center', gap:4 }}>
-                    <input type="number" min="0.001" step="any" value={qty} onChange={e => setEditAsmComps(v => ({...v,[m.id]:parseFloat(e.target.value)||0}))} style={{ width:70, border:`1px solid #7c3aed`, textAlign:'center', padding:'4px' }} placeholder="кількість" />
-                    <span style={{ color:G.t2, fontSize:11, width:24 }}>{m.unit}</span>
+                    <input type="number" min="0.001" step="any" value={qty} onChange={e => setEditAsmComps(v => ({...v,[m.id]:parseFloat(e.target.value)||0}))} style={{ width:70, border:`2px solid #a78bfa`, background:'#2e1065', color:G.t1, fontWeight:'bold', textAlign:'center', padding:'4px' }} placeholder="кількість" />
+                    <span style={{ color:G.t2, fontSize:12, width:24 }}>{m.unit}</span>
                   </div>}
                 </div>
               })}
@@ -1347,25 +1347,27 @@ function AppInner({ isAdmin, onLogout }) {
                   }} style={{ width:16, height:16, accentColor:'#a78bfa', cursor:'pointer', flexShrink:0 }} />
                   <div style={{ flex:1, color:checked?G.t1:G.t2 }}>{m.name}</div>
                   {checked && <div style={{ display:'flex', alignItems:'center', gap:4 }}>
-                    <input type="number" min="0.001" step="any" value={qty} onChange={e => setNewAsmComps(v => ({...v,[m.id]:parseFloat(e.target.value)||0}))} style={{ width:60, border:`1px solid #7c3aed`, textAlign:'center', padding:'2px', fontSize:12 }} placeholder="кільк." />
-                    <span style={{ color:G.t2, fontSize:10, width:20 }}>{m.unit}</span>
+                    <input type="number" min="0.001" step="any" value={qty} onChange={e => setNewAsmComps(v => ({...v,[m.id]:parseFloat(e.target.value)||0}))} style={{ width:80, border:`2px solid #a78bfa`, background:'#2e1065', color:G.t1, fontWeight:'bold', textAlign:'center', padding:'4px', fontSize:13 }} placeholder="кільк." />
+                    <span style={{ color:G.t2, fontSize:12, width:24 }}>{m.unit}</span>
                   </div>}
                 </div>
               })}
             </div>
           </div>
           <div style={{ borderTop:`1px solid ${G.b1}`, marginTop:10, paddingTop:16 }}>
-            <FormRow label="РЕЗУЛЬТАТ (МАТЕРІАЛ, ЯКИЙ СТВОРЮЄТЬСЯ)">
+            <div style={{ fontSize:15, color:G.or, marginBottom:10, fontWeight:'bold' }}>➔ РЕЗУЛЬТАТ ВИРОБНИЦТВА</div>
+            <div style={{ fontSize:12, color:G.t2, marginBottom:10 }}>Що саме буде додано на склад, коли працівник "виготовить" цю збірку?</div>
+            <FormRow label="Готовий матеріал (результат)">
               <select value={newAsmOutMatId} onChange={e => setNewAsmOutMatId(e.target.value)}>
                 <option value="">-- оберіть що виробляється --</option>
                 {materials.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
             </FormRow>
-            <FormRow label="КІЛЬКІСТЬ ОТРИМАНОГО З ОДНІЄЇ ЗБІРКИ">
+            <FormRow label="Кількість готового виробу (зазвичай 1)">
               <input type="number" placeholder="1" value={newAsmOutQty} onChange={e => setNewAsmOutQty(e.target.value)} />
             </FormRow>
-            <FormRow label="НОТАТКА (необов'язково)"><input placeholder="опис" value={newAsmNotes} onChange={e => setNewAsmNotes(e.target.value)} /></FormRow>
-            <SubmitBtn onClick={createAsm} color='#a78bfa'>+ СТВОРИТИ ЗБІРКУ</SubmitBtn>
+            <FormRow label="Нотатка для працівника"><input placeholder="напр. інструкція щодо пайки" value={newAsmNotes} onChange={e => setNewAsmNotes(e.target.value)} /></FormRow>
+            <SubmitBtn onClick={createAsm} color='#a78bfa'>+ ЗБЕРЕГТИ ЗБІРКУ ТА ЇЇ СКЛАД</SubmitBtn>
           </div>
         </Card>
       </>
