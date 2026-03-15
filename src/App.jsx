@@ -378,6 +378,7 @@ function AppInner({ isAdmin, onLogout }) {
   // Редактор збірок (адмін)
   const [asmTab, setAsmTab]         = useState('produce') // 'produce' | 'manage'
   const [editAsmId, setEditAsmId]   = useState(null) // яку збірку редагуємо
+  const [editAsmComps, setEditAsmComps] = useState({})
   const [newAsmName, setNewAsmName] = useState('')
   const [newAsmOutMatId, setNewAsmOutMatId] = useState('')
   const [newAsmOutQty, setNewAsmOutQty]     = useState('1')
@@ -1229,18 +1230,15 @@ function AppInner({ isAdmin, onLogout }) {
           showToast('✓ Видалено')
         })
 
-      // New state for editing assembly components
-      const [editComps, setEditComps] = useState({}) // { matId: qty }
-
       const startEditAsm = (a) => {
         const initial = {}
         a.components.forEach(ac => initial[ac.matId] = ac.qty)
-        setEditComps(initial)
+        setEditAsmComps(initial)
         setEditAsmId(a.id)
       }
 
       const saveEditAsm = async (a) => {
-        const mats = Object.keys(editComps).filter(matId => editComps[matId] > 0).map(matId => ({ matId, qty: editComps[matId] }))
+        const mats = Object.keys(editAsmComps).filter(matId => editAsmComps[matId] > 0).map(matId => ({ matId, qty: editAsmComps[matId] }))
         if (mats.length < 2) return showToast('Збірка повинна містити хоча б 2 матеріали', 'err')
         
         closeModal()
@@ -1304,16 +1302,16 @@ function AppInner({ isAdmin, onLogout }) {
             {isEditing && <div style={{ borderTop:`1px solid ${G.b1}`, paddingTop:10 }}>
               <div style={{ fontSize:12, color:G.t2, marginBottom:10 }}>Позначте матеріали, з яких складається ця збірка:</div>
               {materials.map(m => {
-                const checked = (editComps[m.id] !== undefined && editComps[m.id] > 0)
-                const qty = editComps[m.id] || ''
+                const checked = (editAsmComps[m.id] !== undefined && editAsmComps[m.id] > 0)
+                const qty = editAsmComps[m.id] || ''
                 return <div key={m.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 0', borderBottom:`1px solid ${G.b1}`, fontSize:13 }}>
                   <input type="checkbox" checked={checked} onChange={e => {
                     const chk = e.target.checked
-                    setEditComps(v => ({ ...v, [m.id]: chk ? 1 : 0 }))
+                    setEditAsmComps(v => ({ ...v, [m.id]: chk ? 1 : 0 }))
                   }} style={{ width:18, height:18, accentColor:'#a78bfa', cursor:'pointer', flexShrink:0 }} />
                   <div style={{ flex:1, color:checked?G.t1:G.t2 }}>{m.name}</div>
                   {checked && <div style={{ display:'flex', alignItems:'center', gap:4 }}>
-                    <input type="number" min="0.001" step="any" value={qty} onChange={e => setEditComps(v => ({...v,[m.id]:parseFloat(e.target.value)||0}))} style={{ width:70, border:`1px solid #7c3aed`, textAlign:'center', padding:'4px' }} placeholder="кількість" />
+                    <input type="number" min="0.001" step="any" value={qty} onChange={e => setEditAsmComps(v => ({...v,[m.id]:parseFloat(e.target.value)||0}))} style={{ width:70, border:`1px solid #7c3aed`, textAlign:'center', padding:'4px' }} placeholder="кількість" />
                     <span style={{ color:G.t2, fontSize:11, width:24 }}>{m.unit}</span>
                   </div>}
                 </div>
