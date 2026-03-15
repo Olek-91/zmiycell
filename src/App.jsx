@@ -681,7 +681,7 @@ function AppInner({ isAdmin, onLogout }) {
     const worker = workers.find(w => w.id===workerId)
     const asm = assemblies.find(a => a.id===assemblyId)
     if (!asm || !worker || !qty || qty<=0) return showToast("Заповніть всі поля", 'err')
-    if (!asm.components || asm.components.length===0) return showToast('Збірка без компонентів', 'err')
+    if (!asm.components || asm.components.length < 2) return showToast('Збірка повинна містити хоча б 2 матеріали', 'err')
 
     const items = asm.components.map(ac => {
       const gm = materials.find(m => m.id===ac.matId)
@@ -1268,7 +1268,14 @@ function AppInner({ isAdmin, onLogout }) {
                 </div>
               </div>
               <div style={{ display:'flex', gap:4 }}>
-                <button onClick={() => setEditAsmId(isEditing?null:a.id)} style={{ background:isEditing?'#4c1d95':G.b1, border:`1px solid ${G.b2}`, color:'#a78bfa', padding:'4px 10px', borderRadius:6, fontSize:11, cursor:'pointer' }}>
+                <button onClick={() => {
+                  if (isEditing) {
+                    if (a.components.length < 2) return showToast('Збірка повинна містити хоча б 2 матеріали', 'err')
+                    setEditAsmId(null)
+                  } else {
+                    setEditAsmId(a.id)
+                  }
+                }} style={{ background:isEditing?'#4c1d95':G.b1, border:`1px solid ${G.b2}`, color:'#a78bfa', padding:'4px 10px', borderRadius:6, fontSize:11, cursor:'pointer' }}>
                   {isEditing?'✓ готово':'✎ компоненти'}
                 </button>
                 <button onClick={() => deleteAsm(a)} style={{ background:'#450a0a', border:'none', color:G.rd, padding:'4px 8px', borderRadius:6, fontSize:11, cursor:'pointer' }}>✕</button>
@@ -1425,7 +1432,7 @@ function AppInner({ isAdmin, onLogout }) {
     })
 
     return wrap(<>
-      <SubTabs tabs={[['new','🔧 НОВИЙ'],['log','📋 ЗАПИСИ']]} active={repTab} onChange={setRepTab} />
+      <SubTabs tabs={[['new','🔧 НОВИЙ'],['log','📋 ЗАПИСИ'],['bms','💔 ЗЛАМАНІ BMS']]} active={repTab} onChange={setRepTab} />
       {repTab==='new' && <>
         <Card>
           <CardTitle color='#fb923c'>🔧 РЕЄСТРАЦІЯ РЕМОНТУ</CardTitle>
@@ -1521,6 +1528,25 @@ function AppInner({ isAdmin, onLogout }) {
           </div>}
         </div>)
       )}
+
+      {repTab==='bms' && (() => {
+        const bmsReps = repairLog.filter(r => r.status === 'completed' && (r.note || '').toLowerCase().includes('bms'))
+        if (bmsReps.length === 0) return <Center>Немає записів з поломаними BMS</Center>
+        return bmsReps.map(r => <div key={r.id} style={{ background:G.card, border:`1px solid ${G.b1}`, borderLeft:`3px solid #ef4444`, borderRadius:12, padding:12, marginBottom:10 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', marginBottom:6 }}>
+            <div>
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <span style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:15, fontWeight:700 }}>{r.serial}</span>
+                <Chip bg='#450a0a' color='#ef4444' bd='#7f1d1d'>BMS</Chip>
+              </div>
+              <div style={{ fontSize:12, color:G.t2, marginTop:4 }}>{r.typeName}</div>
+            </div>
+            <span style={{ fontSize:11, color:G.t2 }}>{r.datetime || r.date}</span>
+          </div>
+          <div style={{ fontSize:13, color:'#ef4444', marginBottom:5 }}>📝 {r.note}</div>
+          {r.repairWorker && <div style={{ fontSize:12, color:G.t2, marginBottom:8 }}>Ремонтував: {r.repairWorker}</div>}
+        </div>)
+      })()}
     </>)
   }
 
