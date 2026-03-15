@@ -1229,30 +1229,37 @@ function AppInner({ isAdmin, onLogout }) {
           showToast('✓ Видалено')
         })
 
-      const addComp = async () => {
-        if (!editAsmId||!newAcMatId||!newAcQty) return showToast("Оберіть матеріал і кількість",'err')
-        const res = await api('addAssemblyComponent', [editAsmId, newAcMatId, parseFloat(newAcQty)||0])
-        if (!res.ok) return showToast(res.error,'err')
-        const nc = {id:res.id, assemblyId:editAsmId, matId:newAcMatId, qty:parseFloat(newAcQty)||0}
-        setAssemblies(prev => prev.map(a => a.id!==editAsmId ? a : {...a, components:[...a.components, nc]}))
-        setNewAcQty('')
-        showToast('✓ Компонент додано')
+      // New state for editing assembly components
+      const [editComps, setEditComps] = useState({}) // { matId: qty }
+
+      const startEditAsm = (a) => {
+        const initial = {}
+        a.components.forEach(ac => initial[ac.matId] = ac.qty)
+        setEditComps(initial)
+        setEditAsmId(a.id)
       }
 
-      const removeComp = (asmId, ac) => openConfirm('Видалити компонент?', null, async () => {
+      const saveEditAsm = async (a) => {
+        const mats = Object.keys(editComps).filter(matId => editComps[matId] > 0).map(matId => ({ matId, qty: editComps[matId] }))
+        if (mats.length < 2) return showToast('Збірка повинна містити хоча б 2 матеріали', 'err')
+        
         closeModal()
-        await api('removeAssemblyComponent', [ac.id])
-        setAssemblies(prev => prev.map(a => a.id!==asmId ? a : {...a, components:a.components.filter(x => x.id!==ac.id)}))
-        showToast('✓ Видалено')
-      })
+        // Use the new batch save API
+        await api('saveAssemblyComponents', [a.id, JSON.stringify(mats)])
+        
+        // Update local state by removing old components and adding new ones
+        setAssemblies(prev => prev.map(ax => {
+          if (ax.id !== a.id) return ax
+          const newComps = mats.map((m, i) => ({ id: 'ac_' + Date.now() + '_' + i, assemblyId: a.id, matId: m.matId, qty: m.qty }))
+          return { ...ax, components: newComps }
+        }))
+        setEditAsmId(null)
+        showToast('✓ Склад збірки збережено')
+      }
 
-      const editCompQty = (asmId, ac) => openInput('Нова кількість:', String(ac.qty), String(ac.qty), async (val) => {
-        closeModal()
-        const qty = parseFloat(val)||0
-        await api('updateAssemblyComponent', [ac.id, qty])
-        setAssemblies(prev => prev.map(a => a.id!==asmId ? a : {...a, components:a.components.map(x => x.id!==ac.id ? x : {...x, qty})}))
-        showToast('✓ Оновлено')
-      })
+      const addComp = async () => { /* deprecated single add */ }
+      const removeComp = (asmId, ac) => { /* deprecated single remove */ }
+      const editCompQty = (asmId, ac) => { /* deprecated single edit */ }
 
       return <>
         {/* Список збірок */}
@@ -1270,37 +1277,47 @@ function AppInner({ isAdmin, onLogout }) {
               <div style={{ display:'flex', gap:4 }}>
                 <button onClick={() => {
                   if (isEditing) {
-                    if (a.components.length < 2) return showToast('Збірка повинна містити хоча б 2 матеріали', 'err')
-                    setEditAsmId(null)
+                    saveEditAsm(a)
                   } else {
-                    setEditAsmId(a.id)
+                    startEditAsm(a)
                   }
-                }} style={{ background:isEditing?'#4c1d95':G.b1, border:`1px solid ${G.b2}`, color:'#a78bfa', padding:'4px 10px', borderRadius:6, fontSize:11, cursor:'pointer' }}>
-                  {isEditing?'✓ готово':'✎ компоненти'}
+                }} style={{ background:isEditing?'#166534':G.b1, border:`1px solid ${isEditing?'#22c55e':G.b2}`, color:isEditing?'#22c55e':'#a78bfa', padding:'4px 10px', borderRadius:6, fontSize:11, cursor:'pointer' }}>
+                  {isEditing?'✓ зберегти':'✎ склад'}
                 </button>
-                <button onClick={() => deleteAsm(a)} style={{ background:'#450a0a', border:'none', color:G.rd, padding:'4px 8px', borderRadius:6, fontSize:11, cursor:'pointer' }}>✕</button>
+                {isEditing && <button onClick={() => setEditAsmId(null)} style={{ background:G.b1, border:`1px solid ${G.b2}`, color:G.t2, padding:'4px 10px', borderRadius:6, fontSize:11, cursor:'pointer' }}>✕ скасувати</button>}
+                {!isEditing && <button onClick={() => deleteAsm(a)} style={{ background:'#450a0a', border:'none', color:G.rd, padding:'4px 8px', borderRadius:6, fontSize:11, cursor:'pointer' }}>✕</button>}
               </div>
             </div>
 
-            {/* Компоненти */}
-            {a.components.length>0 && <div style={{ background:G.b1, borderRadius:8, padding:'8px 10px', marginBottom:isEditing?8:0 }}>
+            {/* View Mode */}
+            {!isEditing && a.components.length>0 && <div style={{ background:G.b1, borderRadius:8, padding:'8px 10px' }}>
               {a.components.map(ac => {
                 const cgm = globalMat(ac.matId)
                 return <div key={ac.id} style={{ display:'flex', alignItems:'center', gap:6, padding:'3px 0', fontSize:13 }}>
                   <span style={{ flex:1, color:G.t1 }}>{cgm?.name||ac.matId}</span>
-                  <span onClick={() => isEditing && editCompQty(a.id, ac)} style={{ color:G.or, fontWeight:600, cursor:isEditing?'pointer':'default', background:G.card2, borderRadius:6, padding:'2px 8px' }}>×{ac.qty} {cgm?.unit||''}</span>
-                  {isEditing && <button onClick={() => removeComp(a.id, ac)} style={{ background:'none', border:'none', color:G.rd, fontSize:12, cursor:'pointer', padding:'0 4px' }}>✕</button>}
+                  <span style={{ color:G.or, fontWeight:600, background:G.card2, borderRadius:6, padding:'2px 8px' }}>×{ac.qty} {cgm?.unit||''}</span>
                 </div>
               })}
             </div>}
 
-            {/* Форма додавання компонента */}
-            {isEditing && <div style={{ display:'flex', gap:6, marginTop:4 }}>
-              <select value={newAcMatId} onChange={e => setNewAcMatId(e.target.value)} style={{ flex:2 }}>
-                {materials.map(m => <option key={m.id} value={m.id}>{m.name} ({m.stock} {m.unit})</option>)}
-              </select>
-              <input type="number" placeholder="кількість" value={newAcQty} onChange={e => setNewAcQty(e.target.value)} style={{ width:80 }} />
-              <button onClick={addComp} style={{ padding:'6px 10px', background:'#4c1d95', color:'#a78bfa', border:'none', borderRadius:8, fontSize:13, cursor:'pointer', fontWeight:700 }}>+</button>
+            {/* Edit Mode (Multi-Select List) */}
+            {isEditing && <div style={{ borderTop:`1px solid ${G.b1}`, paddingTop:10 }}>
+              <div style={{ fontSize:12, color:G.t2, marginBottom:10 }}>Позначте матеріали, з яких складається ця збірка:</div>
+              {materials.map(m => {
+                const checked = (editComps[m.id] !== undefined && editComps[m.id] > 0)
+                const qty = editComps[m.id] || ''
+                return <div key={m.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 0', borderBottom:`1px solid ${G.b1}`, fontSize:13 }}>
+                  <input type="checkbox" checked={checked} onChange={e => {
+                    const chk = e.target.checked
+                    setEditComps(v => ({ ...v, [m.id]: chk ? 1 : 0 }))
+                  }} style={{ width:18, height:18, accentColor:'#a78bfa', cursor:'pointer', flexShrink:0 }} />
+                  <div style={{ flex:1, color:checked?G.t1:G.t2 }}>{m.name}</div>
+                  {checked && <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                    <input type="number" min="0.001" step="any" value={qty} onChange={e => setEditComps(v => ({...v,[m.id]:parseFloat(e.target.value)||0}))} style={{ width:70, border:`1px solid #7c3aed`, textAlign:'center', padding:'4px' }} placeholder="кількість" />
+                    <span style={{ color:G.t2, fontSize:11, width:24 }}>{m.unit}</span>
+                  </div>}
+                </div>
+              })}
             </div>}
           </div>
         })}
@@ -1908,6 +1925,10 @@ function AppInner({ isAdmin, onLogout }) {
           <textarea value={draftSteps} onChange={e => setDraftSteps(e.target.value)} style={{ minHeight: 300, fontFamily: "'Fira Code',monospace", fontSize: 13 }} placeholder={'# Заголовок\n1. Крок перший\n2. Крок другий\n⚠ Примітка\n![alt](https://image.url)'} />
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
             <SubmitBtn onClick={saveManual} color={G.gn}>✓ ЗБЕРЕГТИ</SubmitBtn>
+            <button onClick={() => openInput('Вставити фото', 'Введіть URL зображення (напр. з Google Drive або Imgur)', '', (val) => {
+              if(val) setDraftSteps(prev => prev + (prev.endsWith('\n')?'':'\n') + `![img](${val})\n`)
+              closeModal()
+            })} style={{ flex: 1, padding: 12, background: '#1e3a8a', color: '#93c5fd', border: `1px solid #1e40af`, borderRadius: 12, cursor: 'pointer', marginTop: 10, fontWeight: 700 }}>📷 ДОДАТИ ФОТО</button>
             <button onClick={() => setEditing(false)} style={{ flex: 1, padding: 12, background: G.b1, color: G.t2, border: `1px solid ${G.b2}`, borderRadius: 12, cursor: 'pointer', marginTop: 10 }}>Скасувати</button>
           </div>
         </Card>

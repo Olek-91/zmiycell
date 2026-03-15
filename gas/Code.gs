@@ -128,6 +128,7 @@ var ACTIONS = {
   addAssemblyComponent:   addAssemblyComponent,
   updateAssemblyComponent:updateAssemblyComponent,
   removeAssemblyComponent:removeAssemblyComponent,
+  saveAssemblyComponents: saveAssemblyComponents,
   produceAssembly:        produceAssembly,
 
   sendTelegram:           sendTelegramAction,
@@ -1270,6 +1271,36 @@ function updateAssemblyComponent(acId, qty) {
 
 function removeAssemblyComponent(acId) {
   return deleteRowWhere(SHEET.ASSEM_COMP, function(r) { return String(r[0])===String(acId) })
+}
+
+function saveAssemblyComponents(assemblyId, componentsJson) {
+  return withLock(function() {
+    var ss   = SpreadsheetApp.getActiveSpreadsheet()
+    var acSh = ss.getSheetByName(SHEET.ASSEM_COMP)
+    if (!acSh) {
+      acSh = ss.insertSheet(SHEET.ASSEM_COMP)
+      acSh.getRange(1,1,1,4).setValues([['id','assemblyId','matId','qty']])
+    }
+    
+    // 1. Delete all existing components for this assembly
+    var data = acSh.getDataRange().getValues()
+    for (var i = data.length - 1; i >= 1; i--) {
+      if (String(data[i][1]) === String(assemblyId)) {
+        acSh.deleteRow(i + 1)
+      }
+    }
+    
+    // 2. Add the new components
+    var comps = json(componentsJson, [])
+    var added = 0
+    comps.forEach(function(c) {
+      if (!c.matId || !(num(c.qty) > 0)) return
+      var id = 'ac_' + Date.now() + '_' + added++
+      acSh.appendRow([id, assemblyId, c.matId, num(c.qty)])
+    })
+
+    return { ok: true }
+  })
 }
 
 // Виготовлення збірки: списує компоненти, додає готові на склад
