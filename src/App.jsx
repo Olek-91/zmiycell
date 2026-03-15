@@ -592,6 +592,27 @@ function AppInner({ isAdmin, onLogout }) {
     }).filter(Boolean)
   }, [prepItems, materials])
 
+  const buildRepairConsumed = useCallback((repairMaterials, workerId, typeId) => {
+    if (!repairMaterials || repairMaterials.length===0) return []
+    
+    const myPrep   = prepItems.filter(p => p.workerId===workerId && p.scope!=='all' && (p.typeId===typeId || p.typeId==='ALL') && p.status!=='returned')
+    const allPrep  = prepItems.filter(p => p.scope==='all' && (p.typeId===typeId || p.typeId==='ALL') && p.status!=='returned')
+
+    return repairMaterials.map(rm => {
+      const gm = globalMat(rm.matId)
+      if (!gm) return null
+      let need = +rm.qty.toFixed(4)
+      const needOrig = need
+      const pAvail = myPrep.filter(p => p.matId===rm.matId).reduce((s,p) => +(s+p.qty-p.returnedQty).toFixed(4), 0)
+      const fromPersonal = +Math.min(pAvail, need).toFixed(4)
+      need = +(need - fromPersonal).toFixed(4)
+      const aAvail = allPrep.filter(p => p.matId===rm.matId).reduce((s,p) => +(s+p.qty-p.returnedQty).toFixed(4), 0)
+      const fromTeam = +Math.min(aAvail, need).toFixed(4)
+      need = +(need - fromTeam).toFixed(4)
+      return { matId:rm.matId, name:gm.name, unit:gm.unit, amount:needOrig, fromPersonal, fromTeam, fromStock:need, totalStock:gm.stock }
+    }).filter(Boolean)
+  }, [prepItems, materials])
+
 
   // ── Хелпер оновлення глобального stock ───────────────────
   const updateGlobalStock = useCallback((matId, delta) => {
@@ -879,25 +900,75 @@ function AppInner({ isAdmin, onLogout }) {
   }
 
   const doSubmitRepair = (repairEntry) => {
-    const err = repairEntry.materials.filter(m => m.selected && m.qty>0).find(m => {
-      const gm = globalMat(m.matId)
-      return gm && gm.stock < m.qty
-    })
-    if (err) return showToast('Не вистачає: '+err.matName, 'err')
+    const selectedMats = repairEntry.materials.filter(m => m.selected && m.qty>0)
+    
+    // repairWorker in repairing is just string, we need worker.id. Oh, repairEntry has repairWorker (name) but no ID directly? 
+    // Wait, let's find the worker id from repairWorker name.
+    const rWorker = workers.find(w => w.name === repairEntry.repairWorker) || workers[0]
+    const workerId = rWorker?.id
+
+    const consumed = buildRepairConsumed(selectedMats, workerId, repairEntry.typeId)
+
+    const err = consumed.find(c => c.fromStock > c.totalStock)
+    if (err) return showToast('Не вистачає на складі: '+err.name, 'err')
 
     openConfirm('Підтвердити ремонт',
-      <div style={{ fontSize:13, color:G.t2, lineHeight:1.8 }}>С/н: <b style={{ color:G.cy }}>{repairEntry.serial}</b><br/>Ремонтує: {repairEntry.repairWorker}</div>,
+      <div style={{ fontSize:13, color:G.t2, lineHeight:1.8 }}>
+        С/н: <b style={{ color:G.cy }}>{repairEntry.serial}</b><br/>
+        Ремонтує: {repairEntry.repairWorker}
+        {consumed.length > 0 && <div style={{ marginTop:8 }}>
+          <b style={{ color:G.t1, fontSize:12 }}>Матеріали:</b>
+          {consumed.map(c => {
+             return <div key={c.matId} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'3px 0', borderBottom:`1px solid ${G.b1}`, fontSize:12 }}>
+               <span style={{ color:G.t1, paddingRight:8 }}>{c.name}</span>
+               <div style={{ display:'flex', gap:4, alignItems:'center', flexWrap:'wrap', justifyContent:'flex-end' }}>
+                 {c.fromPersonal>0 && <Chip bg='#2e1065' color='#c084fc' bd='#4c1d95'>👷{c.fromPersonal}</Chip>}
+                 {c.fromTeam>0    && <Chip bg='#1e3a8a' color='#93c5fd' bd='#1e40af'>🤝{c.fromTeam}</Chip>}
+                 {c.fromStock>0   && <Chip bg='#1c1007' color='#fb923c' bd='#9a3412'>🏭{c.fromStock}</Chip>}
+                 <span style={{ color:G.gn, fontWeight:600, minWidth:60, textAlign:'right' }}>−{c.amount} {c.unit}</span>
+               </div>
+             </div>
+          })}
+        </div>}
+      </div>,
       async () => {
         closeModal()
+        // Pass consumed array to backend
+        const fullEntry = { ...repairEntry, consumed, workerId }
         try {
-          await api('addRepair', [repairEntry])
-          repairEntry.materials.forEach(m => { if (m.selected && m.qty>0) updateGlobalStock(m.matId, -m.qty) })
-          setRepairLog(prev => [repairEntry, ...prev])
+          await api('addRepair', [fullEntry])
+          
+          // Списуємо компоненти локально
+          consumed.forEach(c => { if (c.fromStock>0) updateGlobalStock(c.matId, -c.fromStock) })
+          
+          // Зменшуємо prepItems
+          setPrepItems(prev => {
+            const next = prev.map(p => ({...p}))
+            consumed.forEach(c => {
+              const deduct = (wId, amt) => {
+                if (!amt) return
+                let rem = amt
+                next.filter(p => p.workerId===wId && p.matId===c.matId && p.status!=='returned').forEach(p => {
+                  if (rem<=0) return
+                  const avail = p.qty-p.returnedQty
+                  const use = Math.min(avail, rem)
+                  p.returnedQty = +(p.returnedQty+use).toFixed(4)
+                  p.status = p.returnedQty>=p.qty?'returned':'partial'
+                  rem = +(rem-use).toFixed(4)
+                })
+              }
+              deduct(workerId, c.fromPersonal)
+              deduct('TEAM_SHARED', c.fromTeam)
+            })
+            return next
+          })
+          
+          setRepairLog(prev => [fullEntry, ...prev])
           setLog(prev => [{
             id:repairEntry.id+'L', datetime:repairEntry.datetime, date:repairEntry.date,
             typeId:repairEntry.typeId, typeName:repairEntry.typeName, workerName:repairEntry.repairWorker,
             count:0, serials:[repairEntry.serial],
-            consumed:repairEntry.materials.filter(m => m.selected&&m.qty>0).map(m => ({name:m.matName,unit:m.unit,amount:m.qty})),
+            consumed: consumed.map(c => ({name:c.name,unit:c.unit,amount:c.amount})),
             kind:'repair', repairNote:repairEntry.note||''
           }, ...prev])
           setRepairSerial(''); setRepairSearch('')

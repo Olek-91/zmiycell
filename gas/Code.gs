@@ -880,21 +880,83 @@ function addRepair(entry) {
     var ss      = SpreadsheetApp.getActiveSpreadsheet()
     var matSh   = ss.getSheetByName(SHEET.MATERIALS)
     var matData = matSh.getDataRange().getValues()
-    var consumed = []
+    var prepSh  = ss.getSheetByName(SHEET.PREP_ITEMS)
+    if (!prepSh) prepSh = ss.insertSheet(SHEET.PREP_ITEMS)
+    var prepData = prepSh.getDataRange().getValues()
+    
+    var consumedLog = []
 
-    ;(entry.materials || []).forEach(function(m) {
-      if (!m.selected || !m.qty) return
-      for (var i = 1; i < matData.length; i++) {
-        if (String(matData[i][0]) === String(m.matId)) {
-          var cur = +matData[i][3] || 0
-          var nv  = Math.max(0, +(cur - m.qty).toFixed(4))
-          matSh.getRange(i + 1, 4).setValue(nv)
-          matData[i][3] = nv
-          consumed.push({ matId: m.matId, name: m.matName, unit: m.unit, amount: m.qty })
-          break
+    if (entry.consumed) {
+      // Advanced flow: using explicitly calculated consumption with preps
+      entry.consumed.forEach(function(c) {
+        if (c.fromStock > 0) {
+          for (var i = 1; i < matData.length; i++) {
+            if (String(matData[i][0]) === String(c.matId)) {
+              var cur = +matData[i][3] || 0
+              var nv  = Math.max(0, +(cur - c.fromStock).toFixed(4))
+              matSh.getRange(i + 1, 4).setValue(nv)
+              matData[i][3] = nv
+              break
+            }
+          }
         }
-      }
-    })
+        
+        if (c.fromPersonal > 0 || c.fromTeam > 0) {
+          var personalNeed = c.fromPersonal || 0
+          var teamNeed = c.fromTeam || 0
+          for (var p = 1; p < prepData.length; p++) {
+            var rowWorkerId = String(prepData[p][1])
+            var rowMatId = String(prepData[p][4])
+            var rowScope = String(prepData[p][12] || 'self')
+            var rowStatus = String(prepData[p][11])
+            var rowQty = num(prepData[p][7])
+            var rowRetQty = num(prepData[p][8])
+
+            if (rowStatus !== 'returned' && rowMatId === String(c.matId)) {
+              var avail = +(rowQty - rowRetQty).toFixed(4)
+              if (avail <= 0) continue
+
+              if (personalNeed > 0 && rowWorkerId === String(entry.workerId) && rowScope !== 'all') {
+                var use = Math.min(avail, personalNeed)
+                var newRetQty = +(rowRetQty + use).toFixed(4)
+                prepSh.getRange(p+1, 9).setValue(newRetQty)
+                var newStatus = newRetQty >= rowQty ? 'returned' : 'partial'
+                prepSh.getRange(p+1, 12).setValue(newStatus)
+                prepData[p][8] = newRetQty; prepData[p][11] = newStatus
+                personalNeed = +(personalNeed - use).toFixed(4)
+                avail = +(avail - use).toFixed(4)
+              }
+
+              if (teamNeed > 0 && rowScope === 'all') {
+                var use = Math.min(avail, teamNeed)
+                var newRetQty = +(rowRetQty + use).toFixed(4)
+                prepSh.getRange(p+1, 9).setValue(newRetQty)
+                var newStatus = newRetQty >= rowQty ? 'returned' : 'partial'
+                prepSh.getRange(p+1, 12).setValue(newStatus)
+                prepData[p][8] = newRetQty; prepData[p][11] = newStatus
+                teamNeed = +(teamNeed - use).toFixed(4)
+              }
+            }
+          }
+        }
+        consumedLog.push({ matId: c.matId, name: c.name, unit: c.unit, amount: c.amount })
+      })
+    } else {
+      // Legacy flow
+      ;(entry.materials || []).forEach(function(m) {
+        if (!m.selected || !m.qty) return
+        for (var i = 1; i < matData.length; i++) {
+          if (String(matData[i][0]) === String(m.matId)) {
+            var cur = +matData[i][3] || 0
+            var nv  = Math.max(0, +(cur - m.qty).toFixed(4))
+            matSh.getRange(i + 1, 4).setValue(nv)
+            matData[i][3] = nv
+            consumedLog.push({ matId: m.matId, name: m.matName, unit: m.unit, amount: m.qty })
+            break
+          }
+        }
+      })
+    }
 
     ss.getSheetByName(SHEET.REPAIR).appendRow([
       entry.id, entry.datetime, entry.date,
@@ -909,7 +971,7 @@ function addRepair(entry) {
       entry.id + 'L', entry.datetime, entry.date,
       entry.typeId, entry.typeName, entry.repairWorker,
       0, entry.serial,
-      JSON.stringify(consumed),
+      JSON.stringify(consumedLog),
       'repair', entry.note || '',
     ])
 
