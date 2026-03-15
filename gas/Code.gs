@@ -130,6 +130,7 @@ var ACTIONS = {
   removeAssemblyComponent:removeAssemblyComponent,
   saveAssemblyComponents: saveAssemblyComponents,
   produceAssembly:        produceAssembly,
+  produceAssemblyAdvanced: produceAssemblyAdvanced,
 
   sendTelegram:           sendTelegramAction,
 }
@@ -1392,6 +1393,139 @@ function produceAssembly(entry) {
     ])
 
     return { ok:true, outputAmt:outputAmt, consumed:consumed }
+  })
+}
+
+// Виготовлення збірки з розширеною логікою (використання заготовок)
+// entry: { assemblyId, qty, workerId, workerName, date, datetime, destination, consumed, outputAmt }
+function produceAssemblyAdvanced(entry) {
+  return withLock(function() {
+    var ss      = SpreadsheetApp.getActiveSpreadsheet()
+    var asmSh   = ss.getSheetByName(SHEET.ASSEMBLIES)
+    var matSh   = ss.getSheetByName(SHEET.MATERIALS)
+    var prepSh  = ss.getSheetByName(SHEET.PREP_ITEMS)
+    if (!prepSh) prepSh = ss.insertSheet(SHEET.PREP_ITEMS)
+      
+    var matData = matSh.getDataRange().getValues()
+    var prepData = prepSh.getDataRange().getValues()
+    var asmData = asmSh.getDataRange().getValues()
+    
+    // Знаходимо збірку
+    var asm = null
+    for (var i=1; i<asmData.length; i++) {
+       if (String(asmData[i][0]) === String(entry.assemblyId)) {
+          asm = { id:asmData[i][0], name:asmData[i][1], outputMatId:asmData[i][2], unit:String(asmData[i][5]||'') } // unit in Col 5
+          break
+       }
+    }
+    if(!asm) return {ok:false, error:'Збірку не знайдено'}
+
+    var consumedList = entry.consumed || []
+
+    // 1. Списуємо матеріали з глобального складу
+    consumedList.forEach(function(c) {
+      if (c.fromStock > 0) {
+        for (var m=1; m<matData.length; m++) {
+          if (String(matData[m][0]) === String(c.matId)) {
+            var nv = Math.max(0, +(num(matData[m][3]) - c.fromStock).toFixed(4))
+            matSh.getRange(m+1, 4).setValue(nv)
+            matData[m][3] = nv
+            break
+          }
+        }
+      }
+    })
+
+    // 2. Зменшуємо (списання) заготовки на руках (prepItems)
+    consumedList.forEach(function(c) {
+      if (c.fromPersonal > 0 || c.fromTeam > 0) {
+        var personalNeed = c.fromPersonal
+        var teamNeed = c.fromTeam
+
+        for (var p=1; p<prepData.length; p++) {
+           var rowWorkerId = String(prepData[p][1])
+           var rowMatId = String(prepData[p][4])
+           var rowScope = String(prepData[p][12] || 'self')
+           var rowStatus = String(prepData[p][11])
+           var rowQty = num(prepData[p][7])
+           var rowRetQty = num(prepData[p][8])
+
+           if (rowStatus !== 'returned' && rowMatId === String(c.matId)) {
+              var avail = +(rowQty - rowRetQty).toFixed(4)
+              if (avail <= 0) continue
+
+              if (personalNeed > 0 && rowWorkerId === String(entry.workerId) && rowScope !== 'all') {
+                  var use = Math.min(avail, personalNeed)
+                  var newRetQty = +(rowRetQty + use).toFixed(4)
+                  prepSh.getRange(p+1, 9).setValue(newRetQty)
+                  var newStatus = newRetQty >= rowQty ? 'returned' : 'partial'
+                  prepSh.getRange(p+1, 12).setValue(newStatus)
+                  
+                  prepData[p][8] = newRetQty
+                  prepData[p][11] = newStatus
+                  personalNeed = +(personalNeed - use).toFixed(4)
+                  avail = +(avail - use).toFixed(4) // if needed for teamNeed fallback, though it's distinct scope
+              }
+
+              if (teamNeed > 0 && rowScope === 'all') {
+                  var use = Math.min(avail, teamNeed)
+                  var newRetQty = +(rowRetQty + use).toFixed(4)
+                  prepSh.getRange(p+1, 9).setValue(newRetQty)
+                  var newStatus = newRetQty >= rowQty ? 'returned' : 'partial'
+                  prepSh.getRange(p+1, 12).setValue(newStatus)
+                  
+                  prepData[p][8] = newRetQty
+                  prepData[p][11] = newStatus
+                  teamNeed = +(teamNeed - use).toFixed(4)
+              }
+           }
+        }
+      }
+    })
+
+    // 3. Зберігаємо результат
+    var outputAmt = num(entry.outputAmt) || 1
+    
+    if (entry.destination === 'stock') {
+      // На глобальний склад
+      for (var m=1; m<matData.length; m++) {
+        if (String(matData[m][0]) === String(asm.outputMatId)) {
+          var newStock = +(num(matData[m][3]) + outputAmt).toFixed(4)
+          matSh.getRange(m+1, 4).setValue(newStock)
+          matData[m][3] = newStock
+          break
+        }
+      }
+    } else {
+      // Як нова заготовка
+      var scope = entry.destination === 'team' ? 'all' : 'self'
+      var pId = 'prep_' + Date.now()
+      var gmName = asm.outputMatId
+      var gmUnit = asm.unit
+      for (var m=1; m<matData.length; m++) {
+        if (String(matData[m][0]) === String(asm.outputMatId)) {
+          gmName = String(matData[m][1])
+          gmUnit = String(matData[m][2])
+          break
+        }
+      }
+      // 'id','workerId','workerName','typeId','matId','matName','unit','qty','returnedQty','date','datetime','status','scope'
+      prepSh.appendRow([
+        pId, entry.workerId, entry.workerName, 'ALL', asm.outputMatId, gmName, gmUnit, outputAmt, 0, entry.date, entry.datetime, 'active', scope
+      ])
+    }
+
+    // 4. Логуємо
+    var logId = 'asmL_' + entry.assemblyId + '_' + Date.now()
+    ss.getSheetByName(SHEET.LOG).appendRow([
+      logId, entry.datetime, entry.date,
+      '', asm.name + (entry.destination!=='stock' ? ' (як заготовка)' : ''), entry.workerName,
+      entry.qty, '',
+      JSON.stringify(consumedList),
+      'assembly', '',
+    ])
+
+    return { ok: true }
   })
 }
 

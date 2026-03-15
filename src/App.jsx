@@ -375,6 +375,7 @@ function AppInner({ isAdmin, onLogout }) {
   const [asmQty, setAsmQty]         = useState(1)
   const [asmWorker, setAsmWorker]   = useState('')
   const [asmDate, setAsmDate]       = useState(todayStr())
+  const [asmDestination, setAsmDestination] = useState('stock') // 'stock' | 'personal' | 'team'
   // Редактор збірок (адмін)
   const [asmTab, setAsmTab]         = useState('produce') // 'produce' | 'manage'
   const [editAsmId, setEditAsmId]   = useState(null) // яку збірку редагуємо
@@ -566,6 +567,31 @@ function AppInner({ isAdmin, onLogout }) {
       return { matId:tm.matId, name:gm.name, unit:gm.unit, amount:needOrig, fromPersonal, fromTeam, fromStock:need, totalStock:gm.stock }
     }).filter(Boolean)
   }, [prepItems, materials, typeMaterials])
+
+  const buildAssemblyConsumed = useCallback((assembly, workerId, qty) => {
+    if (!assembly) return []
+    
+    // For assemblies, we consider prep items that are for 'ALL' types, since assemblies aren't tied to a specific battery type yet.
+    // Except if the user specifically issued prep items for a specific battery type, we might want to allow using them, 
+    // but for simplicity, we look for any prep item for this material for this worker.
+    const myPrep   = prepItems.filter(p => p.workerId===workerId && p.scope!=='all' && p.status!=='returned')
+    const allPrep  = prepItems.filter(p => p.scope==='all' && p.status!=='returned')
+
+    return assembly.components.map(ac => {
+      const gm = globalMat(ac.matId)
+      if (!gm) return null
+      let need = +(ac.qty * qty).toFixed(4)
+      const needOrig = need
+      const pAvail = myPrep.filter(p => p.matId===ac.matId).reduce((s,p) => +(s+p.qty-p.returnedQty).toFixed(4), 0)
+      const fromPersonal = +Math.min(pAvail, need).toFixed(4)
+      need = +(need - fromPersonal).toFixed(4)
+      const aAvail = allPrep.filter(p => p.matId===ac.matId).reduce((s,p) => +(s+p.qty-p.returnedQty).toFixed(4), 0)
+      const fromTeam = +Math.min(aAvail, need).toFixed(4)
+      need = +(need - fromTeam).toFixed(4)
+      return { matId:ac.matId, name:gm.name, unit:gm.unit, amount:needOrig, fromPersonal, fromTeam, fromStock:need, totalStock:gm.stock }
+    }).filter(Boolean)
+  }, [prepItems, materials])
+
 
   // ── Хелпер оновлення глобального stock ───────────────────
   const updateGlobalStock = useCallback((matId, delta) => {
@@ -759,14 +785,11 @@ function AppInner({ isAdmin, onLogout }) {
     if (!worker) return showToast('Оберіть працівника','err')
     if (!asmQty || asmQty<=0) return showToast('Введіть кількість','err')
 
-    // Перевіряємо наявність компонентів
-    const shortage = asm.components.find(ac => {
-      const gm = globalMat(ac.matId)
-      return !gm || gm.stock < +(ac.qty * asmQty).toFixed(4)
-    })
+    const consumed = buildAssemblyConsumed(asm, worker.id, asmQty)
+    const shortage = consumed.find(c => c.fromStock > c.totalStock)
+
     if (shortage) {
-      const gm = globalMat(shortage.matId)
-      return showToast('Не вистачає: '+(gm?.name||shortage.matId), 'err')
+      return showToast('Не вистачає: '+shortage.name, 'err')
     }
 
     const outputAmt = +(asm.outputQty * asmQty).toFixed(4)
@@ -775,20 +798,80 @@ function AppInner({ isAdmin, onLogout }) {
         <b style={{ color:G.or }}>{asm.name}</b><br/>
         Кількість: <b style={{ color:G.cy }}>{asmQty}</b> партій → {outputAmt} {asm.unit}<br/>
         Працівник: {worker.name}<br/>
-        {asm.components.map(ac => {
-          const gm = globalMat(ac.matId)
-          return <div key={ac.id}>− {+(ac.qty*asmQty).toFixed(4)} {gm?.unit||''} {gm?.name||''}</div>
-        })}
+        Куди відправити: <b style={{ color:G.gn }}>{asmDestination==='stock'?'На глобальний склад':asmDestination==='personal'?'Особиста заготовка':'Спільна (для всіх) заготовка'}</b><br/>
+        <div style={{ marginTop:8 }}>
+          {consumed.map(c => {
+             return <div key={c.matId} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'3px 0', borderBottom:`1px solid ${G.b1}`, fontSize:12 }}>
+               <span style={{ color:G.t1, paddingRight:8 }}>{c.name}</span>
+               <div style={{ display:'flex', gap:4, alignItems:'center', flexWrap:'wrap', justifyContent:'flex-end' }}>
+                 {c.fromPersonal>0 && <Chip bg='#2e1065' color='#c084fc' bd='#4c1d95'>👷{c.fromPersonal}</Chip>}
+                 {c.fromTeam>0    && <Chip bg='#1e3a8a' color='#93c5fd' bd='#1e40af'>🤝{c.fromTeam}</Chip>}
+                 {c.fromStock>0   && <Chip bg='#1c1007' color='#fb923c' bd='#9a3412'>🏭{c.fromStock}</Chip>}
+                 <span style={{ color:G.gn, fontWeight:600, minWidth:60, textAlign:'right' }}>−{c.amount} {c.unit}</span>
+               </div>
+             </div>
+          })}
+        </div>
       </div>,
       async () => {
         closeModal()
-        const entry = { assemblyId:asm.id, qty:asmQty, workerId:worker.id, workerName:worker.name, date:asmDate, datetime:nowStr() }
+        // Here we send the advanced payload to the backend
+        const entry = { assemblyId:asm.id, qty:asmQty, workerId:worker.id, workerName:worker.name, date:asmDate, datetime:nowStr(), destination: asmDestination, consumed, outputAmt }
         try {
-          await api('produceAssembly', [entry])
+          // We will update GAS to handle produceAssemblyAdvanced
+          await api('produceAssemblyAdvanced', [entry])
+          
           // Списуємо компоненти локально
-          asm.components.forEach(ac => updateGlobalStock(ac.matId, -(ac.qty*asmQty)))
-          // Додаємо вироблені на склад
-          updateGlobalStock(asm.outputMatId, outputAmt)
+          consumed.forEach(c => { if (c.fromStock>0) updateGlobalStock(c.matId, -c.fromStock) })
+          
+          // Зменшуємо prepItems (аналогічно до списання батарей)
+          setPrepItems(prev => {
+            const next = prev.map(p => ({...p}))
+            consumed.forEach(c => {
+              const deduct = (wId, amt) => {
+                if (!amt) return
+                let rem = amt
+                next.filter(p => p.workerId===wId && p.matId===c.matId && p.status!=='returned').forEach(p => {
+                  if (rem<=0) return
+                  const avail = p.qty-p.returnedQty
+                  const use = Math.min(avail, rem)
+                  p.returnedQty = +(p.returnedQty+use).toFixed(4)
+                  p.status = p.returnedQty>=p.qty?'returned':'partial'
+                  rem = +(rem-use).toFixed(4)
+                })
+              }
+              deduct(worker.id, c.fromPersonal)
+              deduct('TEAM_SHARED', c.fromTeam)
+            })
+            
+            // Якщо результат йде як заготовка - створюємо нову локально
+            if (asmDestination !== 'stock') {
+               const gm = globalMat(asm.outputMatId)
+               next.unshift({
+                 id: 'tmp_prep_'+Date.now(),
+                 workerId: worker.id,
+                 workerName: worker.name,
+                 typeId: 'ALL',
+                 matId: asm.outputMatId,
+                 matName: gm?.name || asm.outputMatId,
+                 unit: asm.unit,
+                 qty: outputAmt,
+                 returnedQty: 0,
+                 date: asmDate,
+                 datetime: nowStr(),
+                 status: 'active',
+                 scope: asmDestination === 'team' ? 'all' : 'self'
+               })
+            }
+            
+            return next
+          })
+          
+          // Додаємо вироблені на склад, якщо вибрано Склад
+          if (asmDestination === 'stock') {
+             updateGlobalStock(asm.outputMatId, outputAmt)
+          }
+
           showToast(`✓ Виготовлено: ${outputAmt} ${asm.unit} → ${asm.name}`)
         } catch {}
       }
@@ -834,6 +917,8 @@ function AppInner({ isAdmin, onLogout }) {
   // ── Таб Збірка (всередині ВИРОБНИЦТВО) ───────────────────
   const AssemblyTab = () => {
     const curAsm = assemblies.find(a => a.id===asmId)
+    const worker = workers.find(w => w.id===asmWorker)
+    const consumed = curAsm && worker ? buildAssemblyConsumed(curAsm, worker.id, asmQty) : []
 
     if (assemblies.length===0) return (
       <Card>
@@ -865,27 +950,45 @@ function AppInner({ isAdmin, onLogout }) {
         </FormRow>
         <FormRow label="ДАТА"><input value={asmDate} onChange={e => setAsmDate(e.target.value)} /></FormRow>
 
-        {curAsm && curAsm.components.length>0 && (
-          <div style={{ background:G.b1, borderRadius:8, padding:'10px 12px', marginBottom:10 }}>
-            <div style={{ fontSize:11, color:G.t2, marginBottom:6, fontWeight:700 }}>КОМПОНЕНТИ (на {asmQty} партій)</div>
-            {curAsm.components.map(ac => {
-              const gm  = globalMat(ac.matId)
-              const need = +(ac.qty * asmQty).toFixed(4)
-              const ok   = gm && gm.stock >= need
-              return <div key={ac.id} style={{ display:'flex', justifyContent:'space-between', fontSize:13, padding:'3px 0', color:ok?G.t1:G.rd }}>
-                <span>{gm?.name||ac.matId}</span>
-                <span style={{ fontWeight:600 }}>{need} {gm?.unit||''} <span style={{ color:ok?G.t2:G.rd, fontSize:11 }}>(є: {gm?.stock??'?'})</span></span>
-              </div>
-            })}
-            <div style={{ borderTop:`1px solid ${G.b2}`, marginTop:8, paddingTop:8, display:'flex', justifyContent:'space-between', fontSize:13 }}>
-              <span style={{ color:G.t2 }}>Вийде на склад:</span>
-              <span style={{ color:'#a78bfa', fontWeight:700 }}>+{+(curAsm.outputQty*asmQty).toFixed(4)} {globalMat(curAsm.outputMatId)?.unit||curAsm.unit} {globalMat(curAsm.outputMatId)?.name||''}</span>
-            </div>
+        <FormRow label="КУДИ ВІДПРАВИТИ ГОТОВУ ЗБІРКУ?">
+          <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:4 }}>
+            <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer' }}>
+              <input type="radio" name="asmDest" value="personal" checked={asmDestination==='personal'} onChange={e => setAsmDestination(e.target.value)} style={{ accentColor:'#a78bfa' }} />
+              <span style={{ color:G.t1, fontSize:14 }}>Особиста заготовка 👷</span>
+            </label>
+            <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer' }}>
+              <input type="radio" name="asmDest" value="team" checked={asmDestination==='team'} onChange={e => setAsmDestination(e.target.value)} style={{ accentColor:'#a78bfa' }} />
+              <span style={{ color:G.t1, fontSize:14 }}>Спільна заготовка (для всіх) 🤝</span>
+            </label>
+            <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer' }}>
+              <input type="radio" name="asmDest" value="stock" checked={asmDestination==='stock'} onChange={e => setAsmDestination(e.target.value)} style={{ accentColor:'#fb923c' }} />
+              <span style={{ color:G.or, fontSize:14 }}>Глобальний склад 🏭</span>
+            </label>
           </div>
-        )}
-
-        <SubmitBtn onClick={doProduceAssembly} color='#a78bfa'>⚙️ ВИГОТОВИТИ</SubmitBtn>
+        </FormRow>
       </Card>
+
+      {curAsm && consumed.length>0 && <Card>
+          <CardTitle color='#a78bfa'>⚡ БУДЕ СПИСАНО ДЛЯ ЗБІРКИ</CardTitle>
+          {consumed.map(c => {
+            const ok = c.fromStock<=c.totalStock
+            return <div key={c.matId} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'7px 0', borderBottom:`1px solid ${G.b1}`, fontSize:13 }}>
+              <span style={{ color:ok?G.t1:G.rd, flex:1, paddingRight:8 }}>{c.name}</span>
+              <div style={{ display:'flex', gap:5, alignItems:'center', flexWrap:'wrap', justifyContent:'flex-end' }}>
+                {c.fromPersonal>0 && <Chip bg='#2e1065' color='#c084fc' bd='#4c1d95'>👷{c.fromPersonal}</Chip>}
+                {c.fromTeam>0    && <Chip bg='#1e3a8a' color='#93c5fd' bd='#1e40af'>🤝{c.fromTeam}</Chip>}
+                {c.fromStock>0   && <Chip bg='#1c1007' color='#fb923c' bd='#9a3412'>🏭{c.fromStock}</Chip>}
+                <span style={{ color:ok?G.gn:G.rd, fontWeight:600, minWidth:60, textAlign:'right' }}>{c.amount} {c.unit}</span>
+              </div>
+            </div>
+          })}
+          <div style={{ borderTop:`1px solid ${G.b2}`, marginTop:12, paddingTop:12, display:'flex', justifyContent:'space-between', fontSize:14 }}>
+            <span style={{ color:G.t2 }}>Отримаємо:</span>
+            <span style={{ color:'#a78bfa', fontWeight:800 }}>+{+(curAsm.outputQty*asmQty).toFixed(4)} {globalMat(curAsm.outputMatId)?.unit||curAsm.unit} {globalMat(curAsm.outputMatId)?.name||''}</span>
+          </div>
+      </Card>}
+
+      <SubmitBtn onClick={doProduceAssembly} color='#a78bfa'>⚙️ ВИГОТОВИТИ ЗБІРКУ</SubmitBtn>
     </>
   }
 
