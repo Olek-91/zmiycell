@@ -383,6 +383,7 @@ function AppInner({ isAdmin, onLogout }) {
   const [newAsmOutMatId, setNewAsmOutMatId] = useState('')
   const [newAsmOutQty, setNewAsmOutQty]     = useState('1')
   const [newAsmNotes, setNewAsmNotes]       = useState('')
+  const [newAsmComps, setNewAsmComps]       = useState({})
   const [newAcMatId, setNewAcMatId] = useState('')
   const [newAcQty, setNewAcQty]     = useState('')
   const [repTab, setRepTab]   = useState('new')
@@ -1210,13 +1211,22 @@ function AppInner({ isAdmin, onLogout }) {
       if (!isAdmin) return <div style={{ color:G.t2, fontSize:13, padding:20, textAlign:'center' }}>Доступно тільки адміну</div>
 
       const createAsm = async () => {
-        if (!newAsmName||!newAsmOutMatId||!newAsmOutQty) return showToast("Назва, матеріал і кількість — обов'язкові",'err')
+        if (!newAsmName||!newAsmOutMatId||!newAsmOutQty) return showToast("Назва, матеріал (результат) і кількість — обов'язкові",'err')
+        
+        const requiredComps = Object.keys(newAsmComps).filter(mId => newAsmComps[mId]>0).map(mId => ({matId:mId, qty:newAsmComps[mId]}))
+        if(requiredComps.length < 2) return showToast("Збірка повинна містити хоча б 2 матеріали", 'err')
+
         const gm = globalMat(newAsmOutMatId)
         const res = await api('addAssembly', [newAsmName, newAsmOutMatId, parseFloat(newAsmOutQty)||1, gm?.unit||'', newAsmNotes])
-        const na = {id:res.id, name:newAsmName, outputMatId:newAsmOutMatId, outputQty:parseFloat(newAsmOutQty)||1, unit:gm?.unit||'', notes:newAsmNotes, components:[]}
+        if (!res.ok) return showToast(res.error, 'err')
+        
+        await api('saveAssemblyComponents', [res.id, JSON.stringify(requiredComps)])
+        const newComponents = requiredComps.map((c, i) => ({ id: 'ac_' + Date.now() + '_' + i, assemblyId: res.id, matId: c.matId, qty: c.qty }))
+
+        const na = {id:res.id, name:newAsmName, outputMatId:newAsmOutMatId, outputQty:parseFloat(newAsmOutQty)||1, unit:gm?.unit||'', notes:newAsmNotes, components:newComponents}
+        
         setAssemblies(prev => [...prev, na])
-        setEditAsmId(res.id)
-        setNewAsmName(''); setNewAsmNotes('')
+        setNewAsmName(''); setNewAsmNotes(''); setNewAsmComps({})
         showToast('✓ Збірку створено: '+newAsmName)
       }
 
@@ -1324,16 +1334,39 @@ function AppInner({ isAdmin, onLogout }) {
         <Card>
           <CardTitle color='#a78bfa'>+ НОВА ЗБІРКА</CardTitle>
           <FormRow label="НАЗВА ЗБІРКИ"><input placeholder="напр. Обжатий кабель XT90" value={newAsmName} onChange={e => setNewAsmName(e.target.value)} /></FormRow>
-          <FormRow label="РЕЗУЛЬТАТ (матеріал на складі)">
-            <select value={newAsmOutMatId} onChange={e => setNewAsmOutMatId(e.target.value)}>
-              {materials.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
-          </FormRow>
-          <FormRow label="КІЛЬКІСТЬ НА 1 ПАРТІЮ">
-            <input type="number" placeholder="1" value={newAsmOutQty} onChange={e => setNewAsmOutQty(e.target.value)} />
-          </FormRow>
-          <FormRow label="НОТАТКА (необов'язково)"><input placeholder="опис" value={newAsmNotes} onChange={e => setNewAsmNotes(e.target.value)} /></FormRow>
-          <SubmitBtn onClick={createAsm} color='#a78bfa'>+ СТВОРИТИ ЗБІРКУ</SubmitBtn>
+          <div style={{ padding:'10px 0' }}>
+            <div style={{ fontSize:12, color:G.t2, marginBottom:10, fontWeight:'bold' }}>КОМПОНЕНТИ ЗБІРКИ (відмітьте, з чого вона складається):</div>
+            <div style={{ maxHeight:240, overflowY:'auto', border:`1px solid ${G.b1}`, borderRadius:8, padding:8, background:'rgba(0,0,0,0.2)' }}>
+              {materials.map(m => {
+                const checked = (newAsmComps[m.id] !== undefined && newAsmComps[m.id] > 0)
+                const qty = newAsmComps[m.id] || ''
+                return <div key={m.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'4px 0', borderBottom:`1px solid ${G.b1}`, fontSize:13 }}>
+                  <input type="checkbox" checked={checked} onChange={e => {
+                    const chk = e.target.checked
+                    setNewAsmComps(v => ({ ...v, [m.id]: chk ? 1 : 0 }))
+                  }} style={{ width:16, height:16, accentColor:'#a78bfa', cursor:'pointer', flexShrink:0 }} />
+                  <div style={{ flex:1, color:checked?G.t1:G.t2 }}>{m.name}</div>
+                  {checked && <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                    <input type="number" min="0.001" step="any" value={qty} onChange={e => setNewAsmComps(v => ({...v,[m.id]:parseFloat(e.target.value)||0}))} style={{ width:60, border:`1px solid #7c3aed`, textAlign:'center', padding:'2px', fontSize:12 }} placeholder="кільк." />
+                    <span style={{ color:G.t2, fontSize:10, width:20 }}>{m.unit}</span>
+                  </div>}
+                </div>
+              })}
+            </div>
+          </div>
+          <div style={{ borderTop:`1px solid ${G.b1}`, marginTop:10, paddingTop:16 }}>
+            <FormRow label="РЕЗУЛЬТАТ (МАТЕРІАЛ, ЯКИЙ СТВОРЮЄТЬСЯ)">
+              <select value={newAsmOutMatId} onChange={e => setNewAsmOutMatId(e.target.value)}>
+                <option value="">-- оберіть що виробляється --</option>
+                {materials.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </FormRow>
+            <FormRow label="КІЛЬКІСТЬ ОТРИМАНОГО З ОДНІЄЇ ЗБІРКИ">
+              <input type="number" placeholder="1" value={newAsmOutQty} onChange={e => setNewAsmOutQty(e.target.value)} />
+            </FormRow>
+            <FormRow label="НОТАТКА (необов'язково)"><input placeholder="опис" value={newAsmNotes} onChange={e => setNewAsmNotes(e.target.value)} /></FormRow>
+            <SubmitBtn onClick={createAsm} color='#a78bfa'>+ СТВОРИТИ ЗБІРКУ</SubmitBtn>
+          </div>
         </Card>
       </>
     }
