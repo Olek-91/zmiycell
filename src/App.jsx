@@ -1582,7 +1582,7 @@ function AppInner({ isAdmin, onLogout }) {
       const initialChecks = {}
       const initialQtys = {}
       typeMaterials.filter(tm => tm.typeId===r.typeId).forEach(tm => {
-        initialChecks[tm.matId] = true
+        initialChecks[tm.matId] = false
         initialQtys[tm.matId] = tm.perBattery
       })
       setCompChecks(initialChecks)
