@@ -1268,6 +1268,16 @@ function AppInner({ isAdmin, onLogout }) {
           </FormRow>
           <SubmitBtn onClick={addMat} color={G.gn}>+ ДОДАТИ НА СКЛАД</SubmitBtn>
         </Card>}
+
+        {isAdmin && <Card>
+          <CardTitle color={G.cy}>✈ ВІДПРАВИТИ СКЛАД У TELEGRAM</CardTitle>
+          <div style={{ color:G.t2, fontSize:13, marginBottom:16 }}>Згенерувати та відправити повний звіт про стан глобального складу боту.</div>
+          <SubmitBtn color={G.cy} onClick={async () => {
+            const lines = materials.map(m => `• ${m.name}: ${m.stock} ${m.unit} (мін: ${m.minStock})`).join('\n')
+            await sendTelegram(`📦 Повний звіт зі складу\n\n${lines}`)
+            showToast('✓ Звіт відправлено в Telegram')
+          }}>📝 ВІДПРАВИТИ ЗВІТ</SubmitBtn>
+        </Card>}
       </>
     }
 
@@ -1387,7 +1397,7 @@ function AppInner({ isAdmin, onLogout }) {
       const createAsm = async () => {
         if (!newAsmName||!newAsmOutMatId||!newAsmOutQty) return showToast("Назва, матеріал (результат) і кількість — обов'язкові",'err')
         
-        const requiredComps = Object.keys(newAsmComps).filter(mId => newAsmComps[mId]>0).map(mId => ({matId:mId, qty:newAsmComps[mId]}))
+        const requiredComps = Object.keys(newAsmComps).map(mId => ({matId:mId, qty:parseFloat(newAsmComps[mId])||0})).filter(c => c.qty > 0)
         if(requiredComps.length < 2) return showToast("Збірка повинна містити хоча б 2 матеріали", 'err')
 
         const gm = globalMat(newAsmOutMatId)
@@ -1422,7 +1432,7 @@ function AppInner({ isAdmin, onLogout }) {
       }
 
       const saveEditAsm = async (a) => {
-        const mats = Object.keys(editAsmComps).filter(matId => editAsmComps[matId] > 0).map(matId => ({ matId, qty: editAsmComps[matId] }))
+        const mats = Object.keys(editAsmComps).map(matId => ({ matId, qty: parseFloat(editAsmComps[matId])||0 })).filter(c => c.qty > 0)
         if (mats.length < 2) return showToast('Збірка повинна містити хоча б 2 матеріали', 'err')
         
         closeModal()
@@ -1486,16 +1496,21 @@ function AppInner({ isAdmin, onLogout }) {
             {isEditing && <div style={{ borderTop:`1px solid ${G.b1}`, paddingTop:10 }}>
               <div style={{ fontSize:12, color:G.t2, marginBottom:10 }}>Позначте матеріали, з яких складається ця збірка:</div>
               {materials.map(m => {
-                const checked = (editAsmComps[m.id] !== undefined && editAsmComps[m.id] > 0)
-                const qty = editAsmComps[m.id] || ''
+                const checked = editAsmComps.hasOwnProperty(m.id)
+                const qty = checked ? (editAsmComps[m.id] ?? '') : ''
                 return <div key={m.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 0', borderBottom:`1px solid ${G.b1}`, fontSize:13 }}>
                   <input type="checkbox" checked={checked} onChange={e => {
                     const chk = e.target.checked
-                    setEditAsmComps(v => ({ ...v, [m.id]: chk ? 1 : 0 }))
+                    setEditAsmComps(v => {
+                      const next = { ...v }
+                      if (chk) next[m.id] = 1
+                      else delete next[m.id]
+                      return next
+                    })
                   }} style={{ width:18, height:18, accentColor:'#a78bfa', cursor:'pointer', flexShrink:0 }} />
                   <div style={{ flex:1, color:checked?G.t1:G.t2 }}>{m.name}</div>
                   {checked && <div style={{ display:'flex', alignItems:'center', gap:4 }}>
-                    <input type="number" min="0.001" step="any" value={qty} onChange={e => setEditAsmComps(v => ({...v,[m.id]:parseFloat(e.target.value)||0}))} style={{ width:70, border:`2px solid #a78bfa`, background:'#2e1065', color:G.t1, fontWeight:'bold', textAlign:'center', padding:'4px' }} placeholder="кількість" />
+                    <input type="number" min="0" step="any" value={qty} onChange={e => setEditAsmComps(v => ({...v,[m.id]:e.target.value}))} style={{ width:70, border:`2px solid #a78bfa`, background:'#2e1065', color:G.t1, fontWeight:'bold', textAlign:'center', padding:'4px' }} placeholder="кількість" />
                     <span style={{ color:G.t2, fontSize:12, width:24 }}>{m.unit}</span>
                   </div>}
                 </div>
@@ -1512,16 +1527,21 @@ function AppInner({ isAdmin, onLogout }) {
             <div style={{ fontSize:12, color:G.t2, marginBottom:10, fontWeight:'bold' }}>КОМПОНЕНТИ ЗБІРКИ (відмітьте, з чого вона складається):</div>
             <div style={{ maxHeight:240, overflowY:'auto', border:`1px solid ${G.b1}`, borderRadius:8, padding:8, background:'rgba(0,0,0,0.2)' }}>
               {materials.map(m => {
-                const checked = (newAsmComps[m.id] !== undefined && newAsmComps[m.id] > 0)
-                const qty = newAsmComps[m.id] || ''
+                const checked = newAsmComps.hasOwnProperty(m.id)
+                const qty = checked ? (newAsmComps[m.id] ?? '') : ''
                 return <div key={m.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'4px 0', borderBottom:`1px solid ${G.b1}`, fontSize:13 }}>
                   <input type="checkbox" checked={checked} onChange={e => {
                     const chk = e.target.checked
-                    setNewAsmComps(v => ({ ...v, [m.id]: chk ? 1 : 0 }))
+                    setNewAsmComps(v => {
+                      const next = { ...v }
+                      if (chk) next[m.id] = 1
+                      else delete next[m.id]
+                      return next
+                    })
                   }} style={{ width:16, height:16, accentColor:'#a78bfa', cursor:'pointer', flexShrink:0 }} />
                   <div style={{ flex:1, color:checked?G.t1:G.t2 }}>{m.name}</div>
                   {checked && <div style={{ display:'flex', alignItems:'center', gap:4 }}>
-                    <input type="number" min="0.001" step="any" value={qty} onChange={e => setNewAsmComps(v => ({...v,[m.id]:parseFloat(e.target.value)||0}))} style={{ width:80, border:`2px solid #a78bfa`, background:'#2e1065', color:G.t1, fontWeight:'bold', textAlign:'center', padding:'4px', fontSize:13 }} placeholder="кільк." />
+                    <input type="number" min="0" step="any" value={qty} onChange={e => setNewAsmComps(v => ({...v,[m.id]:e.target.value}))} style={{ width:80, border:`2px solid #a78bfa`, background:'#2e1065', color:G.t1, fontWeight:'bold', textAlign:'center', padding:'4px', fontSize:13 }} placeholder="кільк." />
                     <span style={{ color:G.t2, fontSize:12, width:24 }}>{m.unit}</span>
                   </div>}
                 </div>
