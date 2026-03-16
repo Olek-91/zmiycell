@@ -1676,7 +1676,7 @@ function AppInner({ isAdmin, onLogout }) {
     })
 
     return wrap(<>
-      <SubTabs tabs={[['new','🔧 НОВИЙ'],['log','📋 ЗАПИСИ'],['bms','💔 ЗЛАМАНІ BMS']]} active={repTab} onChange={setRepTab} />
+      <SubTabs tabs={[['new','🔧 НОВИЙ'],['log',`📋 ЗАПИСИ (${repairLog.length})`],['bms','💔 ЗЛАМАНІ BMS']]} active={repTab} onChange={setRepTab} />
       {repTab==='new' && <>
         <Card>
           <CardTitle color='#fb923c'>🔧 РЕЄСТРАЦІЯ РЕМОНТУ</CardTitle>
@@ -2221,7 +2221,7 @@ function AppInner({ isAdmin, onLogout }) {
       <div style={{ display:'flex', gap:6, flexWrap:'wrap', maxWidth:700, margin:'0 auto', paddingBottom:8 }}>
         {[
           ['🔋', log.filter(l=>l.kind==='production').length, G.t1, G.b1, G.b2],
-          ['🔧', repairLog.length, G.t1, G.b1, G.b2],
+          ['🔧', repairLog.filter(r => r.status !== 'completed').length, G.t1, G.b1, G.b2],
           ['📦', activePrep.length, activePrep.length>0?G.pu:G.t2, activePrep.length>0?'#1e1b4b':G.b1, activePrep.length>0?'#3730a3':G.b2],
         ].map(([icon,val,vc,bg,bd],i) =>
           <span key={i} style={{ background:bg, border:`1px solid ${bd}`, borderRadius:20, padding:'3px 10px', fontSize:11, color:G.t2 }}>

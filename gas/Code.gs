@@ -33,19 +33,35 @@ var TG_CHAT_ID = 'ВСТАВТЕ_CHAT_ID' // @userinfobot або @getidsbot
 function tgSend(text) {
   if (TG_TOKEN === 'ВСТАВТЕ_TOKEN') return
   try {
-    UrlFetchApp.fetch(
-      'https://api.telegram.org/bot' + TG_TOKEN + '/sendMessage',
-      {
-        method: 'post',
-        contentType: 'application/json',
-        payload: JSON.stringify({
-          chat_id: TG_CHAT_ID,
-          text: text,
-          parse_mode: 'HTML',
-          disable_web_page_preview: false
-        })
+    var chunks = []
+    var t = text
+    while (t.length > 0) {
+      if (t.length > 4000) {
+        var limit = t.lastIndexOf('\\n', 4000)
+        if (limit === -1) limit = 4000
+        chunks.push(t.substring(0, limit))
+        t = t.substring(limit).trim()
+      } else {
+        chunks.push(t)
+        t = ''
       }
-    )
+    }
+    
+    for (var i=0; i<chunks.length; i++) {
+      UrlFetchApp.fetch(
+        'https://api.telegram.org/bot' + TG_TOKEN + '/sendMessage',
+        {
+          method: 'post',
+          contentType: 'application/json',
+          payload: JSON.stringify({
+            chat_id: TG_CHAT_ID,
+            text: chunks[i],
+            parse_mode: 'HTML',
+            disable_web_page_preview: false
+          })
+        }
+      )
+    }
   } catch(e) { Logger.log('TG error: ' + e.message) }
 }
 
