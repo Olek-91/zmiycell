@@ -78,6 +78,27 @@ function doGet(e) {
     .setMimeType(ContentService.MimeType.JSON)
 }
 
+function doPost(e) {
+  var result
+  try {
+    var body = e.postData.contents ? JSON.parse(e.postData.contents) : {}
+    var action = body.action || ''
+    var params = body.params || []
+
+    var fn = ACTIONS[action]
+    if (!fn) throw new Error('Unknown action: ' + action)
+
+    result = fn.apply(null, params)
+    if (result === undefined) result = { ok: true }
+  } catch (err) {
+    result = { ok: false, error: err.message }
+  }
+
+  return ContentService
+    .createTextOutput(JSON.stringify(result))
+    .setMimeType(ContentService.MimeType.JSON)
+}
+
 // ── Таблиця дій ──────────────────────────────────────────────
 var ACTIONS = {
   loadAll:                loadAll,

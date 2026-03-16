@@ -18,7 +18,9 @@ export default async function handler(req, res) {
     return
   }
 
-  const { action, params } = req.query
+  const action = req.method === 'POST' ? req.body?.action : req.query.action
+  const paramsStr = req.method === 'POST' ? (req.body?.params ? JSON.stringify(req.body.params) : '') : req.query.params
+  
   if (!action) {
     res.status(400).json({ ok: false, error: 'Missing action' })
     return
@@ -26,14 +28,26 @@ export default async function handler(req, res) {
 
   try {
     const url = new URL(gasUrl)
-    url.searchParams.set('action', action)
-    if (params) url.searchParams.set('params', params)
+    
+    let fetchOptions = {}
+    if (req.method === 'POST') {
+      fetchOptions = {
+        method: 'POST',
+        redirect: 'follow',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ action: action, params: req.body?.params || [] })
+      }
+    } else {
+      url.searchParams.set('action', action)
+      if (paramsStr) url.searchParams.set('params', paramsStr)
+      fetchOptions = {
+        method: 'GET',
+        redirect: 'follow',
+        headers: { 'Accept': 'application/json' },
+      }
+    }
 
-    const gasRes = await fetch(url.toString(), {
-      method: 'GET',
-      redirect: 'follow',
-      headers: { 'Accept': 'application/json' },
-    })
+    const gasRes = await fetch(url.toString(), fetchOptions)
 
     const text = await gasRes.text()
 

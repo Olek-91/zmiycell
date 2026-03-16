@@ -1813,9 +1813,8 @@ function AppInner({ isAdmin, onLogout }) {
     }
 
     const sendToTg = async () => {
-      const pending = lowMats.filter(m => !m.isOrdered)
-      if (pending.length===0) return showToast('Немає нових матеріалів для замовлення!','err')
-      const lines = pending.map(m => {
+      if (lowMats.length===0) return showToast('Немає матеріалів для закупівлі!','err')
+      const lines = lowMats.map(m => {
         const perBattery = perBatteryByMat[m.id] || 0
         const monthNeed = perBattery>0 ? +(perBattery * perDay * 30).toFixed(2) : (m.minStock || 0)
         const toOrder = Math.max(0, +(monthNeed - m.stock).toFixed(2))
@@ -1824,7 +1823,7 @@ function AppInner({ isAdmin, onLogout }) {
       }).join('\n')
       await sendTelegram(`🛒 ZmiyCell — Закупівля\n\n${lines}`)
       showToast('✓ Відправлено в Telegram')
-      for (const m of pending) await setOrdered(m, true)
+      for (const m of lowMats) { if (!m.isOrdered) await setOrdered(m, true) }
     }
 
     return wrap(<>
@@ -1858,7 +1857,7 @@ function AppInner({ isAdmin, onLogout }) {
             </div>
           })
         }
-        {lowMats.filter(m => !m.isOrdered).length>0 && <SubmitBtn color={G.pu} onClick={sendToTg}>✈ ВІДПРАВИТИ В TELEGRAM</SubmitBtn>}
+        {lowMats.length>0 && <SubmitBtn color={G.pu} onClick={sendToTg}>✈ ВІДПРАВИТИ В TELEGRAM</SubmitBtn>}
       </Card>
     </>)
   }
@@ -2177,6 +2176,7 @@ function AppInner({ isAdmin, onLogout }) {
     onTouchEndOrOnMouseUp: () => setSwipeHint(null),
     preventDefaultTouchmoveEvent: false,
     trackMouse: false,
+    delta: 60,
   })
 
   return <>
