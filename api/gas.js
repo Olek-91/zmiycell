@@ -33,7 +33,7 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
       fetchOptions = {
         method: 'POST',
-        redirect: 'follow',
+        redirect: 'manual',
         headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
         body: JSON.stringify({ action: action, params: req.body?.params || [] })
       }
@@ -42,12 +42,19 @@ export default async function handler(req, res) {
       if (paramsStr) url.searchParams.set('params', paramsStr)
       fetchOptions = {
         method: 'GET',
-        redirect: 'follow',
+        redirect: 'manual',
         headers: { 'Accept': 'application/json' },
       }
     }
 
-    const gasRes = await fetch(url.toString(), fetchOptions)
+    let gasRes = await fetch(url.toString(), fetchOptions)
+
+    if (gasRes.status >= 300 && gasRes.status < 400) {
+      const location = gasRes.headers.get('location')
+      if (location) {
+        gasRes = await fetch(location, { method: 'GET' })
+      }
+    }
 
     const text = await gasRes.text()
 
