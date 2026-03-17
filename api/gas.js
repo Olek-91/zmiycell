@@ -27,28 +27,48 @@ export default async function handler(req, res) {
   }
 
   try {
-    const paramsJson = JSON.stringify(params)
+    const isPost = req.method === 'POST'
     const url = new URL(gasUrl)
-    url.searchParams.set('action', action)
-    url.searchParams.set('params', paramsJson)
+    
+    let fetchOpts
+    if (isPost) {
+      // For POST, we don't put params in URL, we send them in body
+      const bodyStr = JSON.stringify({ action, params })
+      fetchOpts = {
+        method: 'POST',
+        redirect: 'manual',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: bodyStr
+      }
+    } else {
+      url.searchParams.set('action', action)
+      url.searchParams.set('params', JSON.stringify(params))
+      fetchOpts = {
+        method: 'GET',
+        redirect: 'manual',
+        headers: { 'Accept': 'application/json' },
+      }
+    }
 
-    let gasRes = await fetch(url.toString(), {
-      method: 'GET',
-      redirect: 'manual',
-      headers: { 'Accept': 'application/json' },
-    })
+    let gasRes = await fetch(url.toString(), fetchOpts)
 
-    // Follow single redirect (GAS завжди робить redirect до виконуваного URL)
+    // Follow single redirect (GAS завжди робить redirect)
     if (gasRes.status >= 300 && gasRes.status < 400) {
       const location = gasRes.headers.get('location')
       if (location) {
-        const redirectUrl = new URL(location)
-        redirectUrl.searchParams.set('action', action)
-        redirectUrl.searchParams.set('params', paramsJson)
-        gasRes = await fetch(redirectUrl.toString(), {
-          method: 'GET',
-          headers: { 'Accept': 'application/json' },
-        })
+        if (isPost) {
+          // Send original POST body to the redirected URL
+          gasRes = await fetch(location, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: fetchOpts.body
+          })
+        } else {
+          gasRes = await fetch(location, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+          })
+        }
       }
     }
 
