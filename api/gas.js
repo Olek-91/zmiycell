@@ -56,19 +56,12 @@ export default async function handler(req, res) {
     if (gasRes.status >= 300 && gasRes.status < 400) {
       const location = gasRes.headers.get('location')
       if (location) {
-        if (isPost) {
-          // Send original POST body to the redirected URL
-          gasRes = await fetch(location, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: fetchOpts.body
-          })
-        } else {
-          gasRes = await fetch(location, {
-            method: 'GET',
-            headers: { 'Accept': 'application/json' },
-          })
-        }
+        // According to GAS architecture, ContentService 302 redirects ALWAYS point to a temporary script.googleusercontent.com URL
+        // that must be fetched with GET, even if the originally dispatched request was a POST.
+        gasRes = await fetch(location, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' },
+        })
       }
     }
 
