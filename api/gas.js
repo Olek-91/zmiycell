@@ -1,10 +1,9 @@
 // api/gas.js — Vercel Serverless Function (ESM)
-// Проксіює запити від браузера до Google Apps Script
-// Вирішує проблему CORS: браузер → Vercel → Apps Script
+// Проксіює запити від браузера до Google Apps Script (завжди GET з params)
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
+  res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
 
   if (req.method === 'OPTIONS') {
@@ -19,40 +18,34 @@ export default async function handler(req, res) {
   }
 
   const action = req.method === 'POST' ? req.body?.action : req.query.action
-  const paramsStr = req.method === 'POST' ? (req.body?.params ? JSON.stringify(req.body.params) : '') : req.query.params
-  
+  const params = req.method === 'POST' ? (req.body?.params || []) : JSON.parse(req.query.params || '[]')
+
   if (!action) {
     res.status(400).json({ ok: false, error: 'Missing action' })
     return
   }
 
   try {
+    // GAS supports both doGet and doPost — we always send as GET with params
+    // For large payloads, we use the redirect-follow POST method
     const url = new URL(gasUrl)
-    
-    let fetchOptions = {}
-    if (req.method === 'POST') {
-      fetchOptions = {
-        method: 'POST',
-        redirect: 'manual',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({ action: action, params: req.body?.params || [] })
-      }
-    } else {
-      url.searchParams.set('action', action)
-      if (paramsStr) url.searchParams.set('params', paramsStr)
-      fetchOptions = {
-        method: 'GET',
-        redirect: 'manual',
-        headers: { 'Accept': 'application/json' },
-      }
-    }
+    url.searchParams.set('action', action)
+    url.searchParams.set('params', JSON.stringify(params))
 
-    let gasRes = await fetch(url.toString(), fetchOptions)
+    let gasRes = await fetch(url.toString(), {
+      method: 'GET',
+      redirect: 'manual',
+      headers: { 'Accept': 'application/json' },
+    })
 
+    // Follow redirect
     if (gasRes.status >= 300 && gasRes.status < 400) {
       const location = gasRes.headers.get('location')
       if (location) {
-        gasRes = await fetch(location, { method: 'GET' })
+        const redirectUrl = new URL(location)
+        redirectUrl.searchParams.set('action', action)
+        redirectUrl.searchParams.set('params', JSON.stringify(params))
+        gasRes = await fetch(redirectUrl.toString(), { method: 'GET', headers: { 'Accept': 'application/json' } })
       }
     }
 
@@ -60,7 +53,7 @@ export default async function handler(req, res) {
 
     let data
     try { data = JSON.parse(text) }
-    catch (_) { data = { ok: false, error: 'Invalid JSON from Apps Script: ' + text.slice(0, 200) } }
+    catch (_) { data = { ok: false, error: 'Invalid JSON from Apps Script: ' + text.slice(0, 300) } }
 
     res.status(200).json(data)
   } catch (err) {

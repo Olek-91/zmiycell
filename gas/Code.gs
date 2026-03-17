@@ -23,6 +23,8 @@ var SHEET = {
   REPAIR:    'RepairLog',
   PREP:      'PrepItems',
   PAYMENTS:  'Payments',
+  ACTION_LOG:'ActionLogs',
+  MAT_BACKUP:'MaterialsBackup',
 }
 
 // Telegram — заповніть свої дані
@@ -97,7 +99,7 @@ function doGet(e) {
 function doPost(e) {
   var result
   try {
-    var body = e.postData.contents ? JSON.parse(e.postData.contents) : {}
+    var body = JSON.parse(e.postData.contents)
     var action = body.action || ''
     var params = body.params || []
 
@@ -114,6 +116,8 @@ function doPost(e) {
     .createTextOutput(JSON.stringify(result))
     .setMimeType(ContentService.MimeType.JSON)
 }
+
+
 
 // ── Таблиця дій ──────────────────────────────────────────────
 var ACTIONS = {
@@ -168,6 +172,15 @@ var ACTIONS = {
   saveAssemblyComponents: saveAssemblyComponents,
   produceAssembly:        produceAssembly,
   produceAssemblyAdvanced: produceAssemblyAdvanced,
+
+  // Лог дій
+  logAction:              logAction,
+  getActionLogs:          getActionLogs,
+
+  // Бекап матеріалів
+  saveStockBackup:        saveStockBackup,
+  getBackupDiff:          getBackupDiff,
+  restoreFromBackup:      restoreFromBackup,
 
   sendTelegram:           sendTelegramAction,
 }
@@ -263,6 +276,16 @@ function initSheets() {
   ensureColumn(ss.getSheetByName(SHEET.PREP), 'scope')
   ensureSheet(ss, SHEET.PAYMENTS,
     ['id','workerId','workerName','count','date','datetime'],
+    []
+  )
+
+  ensureSheet(ss, SHEET.ACTION_LOG,
+    ['id','date','datetime','user','action_type','details'],
+    []
+  )
+
+  ensureSheet(ss, SHEET.MAT_BACKUP,
+    ['matId','name','unit','stock','snapshotDate'],
     []
   )
 
@@ -1730,3 +1753,135 @@ function updateRepairStatus(repairId, status, dateCompleted, workerName, materia
 function num(v)       { return parseFloat(v) || 0 }
 function int(v)       { return parseInt(v)   || 0 }
 function json(s, def) { try { return s ? JSON.parse(s) : def } catch(_) { return def } }
+
+// ══════════════════════════════════════════════════════════════
+//  ЛОГ ДІЙ
+// ══════════════════════════════════════════════════════════════
+function logAction(user, actionType, details) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet()
+  var sh = ss.getSheetByName(SHEET.ACTION_LOG)
+  if (!sh) return { ok: false, error: 'ActionLogs sheet not found' }
+  var now = new Date()
+  var date = Utilities.formatDate(now, Session.getScriptTimeZone(), 'dd.MM.yyyy')
+  var datetime = Utilities.formatDate(now, Session.getScriptTimeZone(), 'dd.MM.yyyy HH:mm')
+  var id = String(now.getTime())
+  sh.appendRow([id, date, datetime, user || '', actionType || '', details || ''])
+  return { ok: true }
+}
+
+function getActionLogs() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet()
+  var sh = ss.getSheetByName(SHEET.ACTION_LOG)
+  if (!sh) return []
+  var rows = sh.getDataRange().getValues()
+  if (rows.length < 2) return []
+  return rows.slice(1).map(function(r) {
+    return { id: String(r[0]), date: String(r[1]), datetime: String(r[2]), user: String(r[3]), actionType: String(r[4]), details: String(r[5]) }
+  }).reverse()
+}
+
+// ══════════════════════════════════════════════════════════════
+//  БЕКАП / ІНВЕНТАРИЗАЦІЯ
+// ══════════════════════════════════════════════════════════════
+function saveStockBackup(user) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet()
+  var matSh = ss.getSheetByName(SHEET.MATERIALS)
+  var bakSh = ss.getSheetByName(SHEET.MAT_BACKUP)
+  if (!matSh || !bakSh) return { ok: false, error: 'Sheet not found' }
+
+  var rows = matSh.getDataRange().getValues()
+  if (rows.length < 2) return { ok: false, error: 'No materials' }
+  var headers = rows[0]
+  var idIdx=0, nameIdx=1, unitIdx=2, stockIdx=3
+
+  // Find columns by header name
+  headers.forEach(function(h, i) {
+    if (h === 'id') idIdx = i
+    else if (h === 'name') nameIdx = i
+    else if (h === 'unit') unitIdx = i
+    else if (h === 'stock') stockIdx = i
+  })
+
+  var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd.MM.yyyy HH:mm')
+
+  // Clear and rewrite backup
+  bakSh.clearContents()
+  bakSh.appendRow(['matId', 'name', 'unit', 'stock', 'snapshotDate'])
+  rows.slice(1).forEach(function(r) {
+    bakSh.appendRow([String(r[idIdx]), String(r[nameIdx]), String(r[unitIdx]), parseFloat(r[stockIdx]) || 0, today])
+  })
+
+  logAction(user || 'Адмін', 'backup', 'Зріз складу створено: ' + today)
+  return { ok: true, date: today }
+}
+
+function getBackupDiff() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet()
+  var matSh = ss.getSheetByName(SHEET.MATERIALS)
+  var bakSh = ss.getSheetByName(SHEET.MAT_BACKUP)
+  if (!matSh || !bakSh) return { ok: false, error: 'Sheet not found' }
+
+  var matRows = matSh.getDataRange().getValues()
+  var bakRows = bakSh.getDataRange().getValues()
+  if (matRows.length < 2) return []
+  if (bakRows.length < 2) return []
+
+  var matHeaders = matRows[0]
+  var idIdx=0, nameIdx=1, unitIdx=2, stockIdx=3
+  matHeaders.forEach(function(h, i) {
+    if (h === 'id') idIdx = i
+    else if (h === 'name') nameIdx = i
+    else if (h === 'unit') unitIdx = i
+    else if (h === 'stock') stockIdx = i
+  })
+
+  // Build backup map
+  var bakMap = {}
+  var snapshotDate = ''
+  bakRows.slice(1).forEach(function(r) {
+    bakMap[String(r[0])] = { stock: parseFloat(r[3]) || 0, name: String(r[1]) }
+    if (!snapshotDate && r[4]) snapshotDate = String(r[4])
+  })
+
+  var result = matRows.slice(1).map(function(r) {
+    var matId = String(r[idIdx])
+    var current = parseFloat(r[stockIdx]) || 0
+    var bak = bakMap[matId]
+    var backup = bak ? bak.stock : null
+    var diff = backup !== null ? +(current - backup).toFixed(4) : null
+    return { matId, name: String(r[nameIdx]), unit: String(r[unitIdx]), current, backup, diff }
+  })
+
+  return { ok: true, rows: result, snapshotDate }
+}
+
+function restoreFromBackup(user) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet()
+  var matSh = ss.getSheetByName(SHEET.MATERIALS)
+  var bakSh = ss.getSheetByName(SHEET.MAT_BACKUP)
+  if (!matSh || !bakSh) return { ok: false, error: 'Sheet not found' }
+
+  var bakRows = bakSh.getDataRange().getValues()
+  if (bakRows.length < 2) return { ok: false, error: 'Backup is empty' }
+  var bakMap = {}
+  bakRows.slice(1).forEach(function(r) { bakMap[String(r[0])] = parseFloat(r[3]) || 0 })
+
+  var matRows = matSh.getDataRange().getValues()
+  var headers = matRows[0]
+  var idIdx=0, stockIdx=3
+  headers.forEach(function(h, i) {
+    if (h === 'id') idIdx = i
+    else if (h === 'stock') stockIdx = i
+  })
+
+  matRows.slice(1).forEach(function(r, i) {
+    var matId = String(r[idIdx])
+    if (bakMap[matId] !== undefined) {
+      matSh.getRange(i + 2, stockIdx + 1).setValue(bakMap[matId])
+    }
+  })
+
+  logAction(user || 'Адмін', 'restore', 'Склад відновлено з бекапу')
+  return { ok: true }
+}
+
