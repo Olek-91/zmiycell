@@ -40,6 +40,7 @@ const sendTelegram = async (text) => {
 const todayStr = () => new Date().toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric' })
 const nowStr   = () => new Date().toLocaleString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 const uid      = () => String(Date.now()) + String(Math.floor(Math.random() * 9999))
+const num      = v => parseFloat(v) || 0
 
 // ════════════════════════════════════════════════════════
 //  UI АТОМИ
@@ -468,7 +469,10 @@ function AppInner({ isAdmin, onLogout }) {
   const [swipeHint, setSwipeHint] = useState(null)
   // PageActionLog / PageBackup — lifted to App level to survive re-renders
   const [actionLogs, setActionLogs]     = useState(null)  // null = not loaded yet
+  const [filterUser, setFilterUser]     = useState('')
+  const [filterDate, setFilterDate]     = useState('')
   const [backupDiff, setBackupDiff]     = useState(null)
+  const [busy, setBusy]                 = useState(false)
   const [snapshotDate, setSnapshotDate] = useState('')
 
   // ── Обчислювані дані ──────────────────────────────────────
@@ -2319,8 +2323,6 @@ function AppInner({ isAdmin, onLogout }) {
   useEffect(() => { if (page === 'backup') loadBackupDiff() }, [page])
 
   const PageActionLog = () => {
-    const [filterUser, setFilterUser] = useState('')
-    const [filterDate, setFilterDate] = useState('')
     const filtered = (actionLogs||[]).filter(e =>
       (!filterUser || (e.user||'').toLowerCase().includes(filterUser.toLowerCase())) &&
       (!filterDate || (e.date||'').includes(filterDate))
@@ -2353,7 +2355,6 @@ function AppInner({ isAdmin, onLogout }) {
 
   // ── Бекап / Інвентаризація (адмін) ────────────────────────
   const PageBackup = () => {
-    const [busy, setBusy] = useState(false)
     const makeBackup = async () => {
       setBusy(true)
       try {
@@ -2466,7 +2467,7 @@ function AppInner({ isAdmin, onLogout }) {
       </div>
       <div style={{ display:'flex', gap:6, flexWrap:'wrap', maxWidth:700, margin:'0 auto', paddingBottom:8 }}>
         {[
-          ['🔋', log.filter(l=>l.kind==='production').length, G.t1, G.b1, G.b2],
+          ['🔋', log.filter(l=>l.kind==='production' && l.date===todayStr()).reduce((sum,l)=>sum+num(l.count), 0), G.t1, G.b1, G.b2],
           ['🔧', repairLog.filter(r => r.status !== 'completed').length, G.t1, G.b1, G.b2],
           ['✅', repairLog.filter(r => r.status === 'completed' && (r.note || '').includes(todayStr())).length, G.gn, '#052e16', '#166534'],
           ['📦', activePrep.length, activePrep.length>0?G.pu:G.t2, activePrep.length>0?'#1e1b4b':G.b1, activePrep.length>0?'#3730a3':G.b2],
