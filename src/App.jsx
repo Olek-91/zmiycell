@@ -459,6 +459,10 @@ function AppInner({ isAdmin, onLogout }) {
   const [manualDraft, setManualDraft]     = useState('')
   // Swipe hint
   const [swipeHint, setSwipeHint] = useState(null)
+  // PageActionLog / PageBackup — lifted to App level to survive re-renders
+  const [actionLogs, setActionLogs]     = useState(null)  // null = not loaded yet
+  const [backupDiff, setBackupDiff]     = useState(null)
+  const [snapshotDate, setSnapshotDate] = useState('')
 
   // ── Обчислювані дані ──────────────────────────────────────
   const paidByWorker = useMemo(() => {
@@ -2290,18 +2294,29 @@ function AppInner({ isAdmin, onLogout }) {
   }
 
   // ── Лог дій (адмін) ───────────────────────────────────────
+  const loadActionLogs = useCallback(() => {
+    setActionLogs(null)
+    gasCall('getActionLogs',[]).then(d => setActionLogs(Array.isArray(d) ? d : (d?.ok===false?[]:d||[]))).catch(() => setActionLogs([]))
+  }, [])
+  useEffect(() => { if (page === 'actlog') loadActionLogs() }, [page])
+
+  const loadBackupDiff = useCallback(() => {
+    setBackupDiff(null)
+    gasCall('getBackupDiff',[]).then(d => {
+      if (d?.ok && d.rows) { setBackupDiff(d.rows); setSnapshotDate(d.snapshotDate||'') }
+      else { setBackupDiff([]); setSnapshotDate('') }
+    }).catch(() => setBackupDiff([]))
+  }, [])
+  useEffect(() => { if (page === 'backup') loadBackupDiff() }, [page])
+
   const PageActionLog = () => {
-    const [actLogs, setActLogs] = useState(null)
     const [filterUser, setFilterUser] = useState('')
     const [filterDate, setFilterDate] = useState('')
-    useEffect(() => {
-      gasCall('getActionLogs',[]).then(d => setActLogs(Array.isArray(d) ? d : [])).catch(() => setActLogs([]))
-    }, [])
-    if (actLogs === null) return wrap(<Center>⟳ Завантаження...</Center>)
-    const filtered = actLogs.filter(e =>
+    const filtered = (actionLogs||[]).filter(e =>
       (!filterUser || e.user.toLowerCase().includes(filterUser.toLowerCase())) &&
       (!filterDate || e.date.includes(filterDate))
     )
+    if (actionLogs === null) return wrap(<Center>⟳ Завантаження...</Center>)
     const typeColor = (t) => t==='backup'?G.cy:t==='restore'?G.rd:t==='production'?G.gn:t==='repair'?'#fb923c':G.pu
     return wrap(<>
       <Card>
@@ -2309,6 +2324,7 @@ function AppInner({ isAdmin, onLogout }) {
         <div style={{ display:'flex', gap:8, marginBottom:10 }}>
           <input placeholder="Фільтр по юзеру" value={filterUser} onChange={e=>setFilterUser(e.target.value)} />
           <input placeholder="Дата (дд.мм)" value={filterDate} onChange={e=>setFilterDate(e.target.value)} style={{ width:120, flexShrink:0 }} />
+          <button onClick={loadActionLogs} style={{ padding:'6px 12px', background:G.b1, border:`1px solid ${G.b2}`, color:G.t2, borderRadius:8, fontSize:12, cursor:'pointer', flexShrink:0 }}>🔄</button>
         </div>
         {filtered.length === 0 ? <Center>Лог порожній</Center> : filtered.map(e =>
           <div key={e.id} style={{ background:G.card2, borderRadius:10, padding:'10px 12px', marginBottom:8, borderLeft:`3px solid ${typeColor(e.actionType)}` }}>
@@ -2328,23 +2344,13 @@ function AppInner({ isAdmin, onLogout }) {
 
   // ── Бекап / Інвентаризація (адмін) ────────────────────────
   const PageBackup = () => {
-    const [diff, setDiff] = useState(null)
-    const [snapshotDate, setSnapshotDate] = useState('')
     const [busy, setBusy] = useState(false)
-    const loadDiff = () => {
-      setDiff(null)
-      gasCall('getBackupDiff',[]).then(d => {
-        if (d && d.ok && d.rows) { setDiff(d.rows); setSnapshotDate(d.snapshotDate||'') }
-        else { setDiff([]); setSnapshotDate('') }
-      }).catch(() => setDiff([]))
-    }
-    useEffect(() => { loadDiff() }, [])
     const makeBackup = async () => {
       setBusy(true)
       try {
         await api('saveStockBackup', ['Адмін'])
         showToast('✓ Зріз складу збережено')
-        loadDiff()
+        loadBackupDiff()
       } catch {} finally { setBusy(false) }
     }
     const doRestore = () => openConfirm('Відновити склад з бекапу?',
@@ -2357,6 +2363,7 @@ function AppInner({ isAdmin, onLogout }) {
           showToast('✓ Склад відновлено з бекапу')
           const fresh = await gasCall('loadAll',[])
           if (fresh?.materials) setMaterials(fresh.materials)
+          loadBackupDiff()
         } catch {} finally { setBusy(false) }
       }
     )
@@ -2368,9 +2375,10 @@ function AppInner({ isAdmin, onLogout }) {
         <div style={{ display:'flex', gap:8, marginBottom:12 }}>
           <SubmitBtn color={G.gn} onClick={makeBackup} disabled={busy}>📸 ЗРОБИТИ ЗРІЗ</SubmitBtn>
           {snapshotDate && <SubmitBtn color={G.rd} onClick={doRestore} disabled={busy}>♻ ВІДНОВИТИ З БЕКАПУ</SubmitBtn>}
+          <button onClick={loadBackupDiff} style={{ padding:'6px 14px', background:G.b1, border:`1px solid ${G.b2}`, color:G.t2, borderRadius:8, fontSize:12, cursor:'pointer' }}>🔄</button>
         </div>
-        {diff === null ? <Center>⟳ Завантаження...</Center>
-        : diff.length === 0 ? <Center>Бекап порожній — зробіть зріз</Center>
+        {backupDiff === null ? <Center>⟳ Завантаження...</Center>
+        : backupDiff.length === 0 ? <Center>Бекап порожній — зробіть зріз</Center>
         : <>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 70px 70px 70px', gap:4, fontSize:11, color:G.t2, fontWeight:700, padding:'4px 0', borderBottom:`1px solid ${G.b2}` }}>
             <span>Матеріал</span><span style={{textAlign:'center'}}>Зріз</span><span style={{textAlign:'center'}}>Зараз</span><span style={{textAlign:'center'}}>Різниця</span>
