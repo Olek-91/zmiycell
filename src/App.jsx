@@ -2467,7 +2467,7 @@ function AppInner({ isAdmin, onLogout }) {
       </div>
       <div style={{ display:'flex', gap:6, flexWrap:'wrap', maxWidth:700, margin:'0 auto', paddingBottom:8 }}>
         {[
-          ['🔋', log.filter(l => l.kind !== 'prep' && l.kind !== 'repair' && String(l.date).includes(todayStr())).reduce((sum, l) => sum + num(l.count), 0), G.t1, G.b1, G.b2],
+          ['🔋', log.filter(l => l.kind === 'production' && String(l.datetime).startsWith(todayStr())).reduce((sum, l) => sum + num(l.count), 0), G.t1, G.b1, G.b2],
           ['🔧', repairLog.filter(r => r.status !== 'completed').length, G.t1, G.b1, G.b2],
           ['✅', repairLog.filter(r => r.status === 'completed' && (r.note || '').includes(todayStr())).length, G.gn, '#052e16', '#166534'],
           ['📦', activePrep.length, activePrep.length>0?G.pu:G.t2, activePrep.length>0?'#1e1b4b':G.b1, activePrep.length>0?'#3730a3':G.b2],
