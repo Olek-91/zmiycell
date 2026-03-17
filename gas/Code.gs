@@ -244,6 +244,16 @@ function initSheets() {
     ]
   )
 
+  ensureSheet(ss, SHEET.ACTION_LOG,
+    ['id', 'date', 'datetime', 'user', 'actionType', 'details'],
+    []
+  )
+
+  ensureSheet(ss, SHEET.MAT_BACKUP,
+    ['matId', 'name', 'unit', 'stock', 'snapshotDate'],
+    []
+  )
+
   ensureSheet(ss, SHEET.TOOLS,
     ['id', 'name', 'category', 'count', 'working', 'serial', 'notes', 'repairNote', 'repairDate'],
     [
@@ -732,6 +742,8 @@ function writeOff(entry) {
       entry.repairNote || '',
     ])
 
+    logAction(entry.workerName || 'Невідомо', entry.kind || 'production', 'Списано ' + (entry.count||0) + ' акум.: ' + (entry.typeName||''))
+
     return { ok: true }
   })
 }
@@ -1036,6 +1048,8 @@ function addRepair(entry) {
       JSON.stringify(consumedLog),
       'repair', entry.note || '',
     ])
+
+    logAction(entry.originalWorker || 'Невідомо', 'repair', 'Прийнято в ремонт: ' + entry.serial)
 
     return { ok: true }
   })
@@ -1649,6 +1663,8 @@ function produceAssemblyAdvanced(entry) {
       'assembly', '',
     ])
 
+    logAction(entry.workerName || 'Невідомо', 'assembly', 'Виготовлено збірку: ' + asm.name + ' (' + entry.qty + ' шт)')
+
     return { ok: true }
   })
 }
@@ -1748,6 +1764,10 @@ function updateRepairStatus(repairId, status, dateCompleted, workerName, materia
        repSh.getRange(foundIndex + 1, 9).setValue(newNote) // Note is col 9
     }
     
+    if (status === 'completed') {
+      logAction(workerName || 'Невідомо', 'repair', 'Завершено ремонт: ' + String(row[3]))
+    }
+
     return { ok: true, consumed: consumed }
   })
 }

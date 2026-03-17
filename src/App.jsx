@@ -206,6 +206,13 @@ function PrepTab({ batteryTypes, workers, assemblies, materials, prepItems, onIs
   const [consId, setConsId]   = useState(materials[0]?.id || '')
   const [qty, setQty]         = useState(1)
   const [allTypes, setAllTypes] = useState(false)
+  
+  // Update state when data loads if initial state was empty
+  useEffect(() => { if (!wId && workers.length > 0) setWId(workers[0].id) }, [workers, wId])
+  useEffect(() => { if (!typeId && batteryTypes.length > 0) setTypeId(batteryTypes[0].id) }, [batteryTypes, typeId])
+  useEffect(() => { if (!asmId && assemblies.length > 0) setAsmId(assemblies[0].id) }, [assemblies, asmId])
+  useEffect(() => { if (!consId && materials.length > 0) setConsId(materials[0].id) }, [materials, consId])
+
   const [forAll, setForAll]   = useState(false)
   const [retVals, setRetVals] = useState({})
   const [subTab, setSubTab]   = useState('active')
@@ -225,7 +232,7 @@ function PrepTab({ batteryTypes, workers, assemblies, materials, prepItems, onIs
       <CardTitle color={G.pu}>📊 ЗАГАЛОМ НА РУКАХ</CardTitle>
       {list.length === 0 ? <div style={{ color:G.t2, fontSize:13 }}>Пусто</div> : 
         list.map((g,i) => <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:`1px solid ${G.card2}`, fontSize:13 }}>
-          <div><span style={{ fontWeight:600 }}>{g.workerName}</span> <span style={{ color:G.t2, fontSize:11 }}>({g.scope==='all'?'всі':'осб'})</span><br/><span style={{ color:G.t1 }}>{g.matName}</span></div>
+          <div><span style={{ fontWeight:600, color:getWorkerColor(g.workerName) }}>{g.workerName}</span> <span style={{ color:G.t2, fontSize:11 }}>({g.scope==='all'?'всі':'осб'})</span><br/><span style={{ color:G.t1 }}>{g.matName}</span></div>
           <div style={{ fontWeight:700, color:G.pu }}>{+g.amount.toFixed(4)} {g.unit}</div>
         </div>)
       }
@@ -503,8 +510,8 @@ function AppInner({ isAdmin, onLogout }) {
 
   // ── Pull-to-refresh ───────────────────────────────────────
   const handleTouchStart = (e) => { const el=e.currentTarget; if(el.scrollTop<=0){startY.current=e.touches[0].pageY;setIsPulling(true)} }
-  const handleTouchMove  = (e) => { if(!isPulling) return; const dist=e.touches[0].pageY-startY.current; if(dist>0){setPullDist(Math.min(dist*.25,70));if(dist>15&&e.cancelable)e.preventDefault()}else{setIsPulling(false);setPullDist(0)} }
-  const handleTouchEnd   = ()  => { if(pullDist>58) window.location.reload(); setIsPulling(false); setPullDist(0) }
+  const handleTouchMove  = (e) => { if(!isPulling) return; const dist=e.touches[0].pageY-startY.current; if(dist>0){setPullDist(Math.min(dist*.3,100));if(dist>15&&e.cancelable)e.preventDefault()}else{setIsPulling(false);setPullDist(0)} }
+  const handleTouchEnd   = ()  => { if(pullDist>90) window.location.reload(); setIsPulling(false); setPullDist(0) }
 
   // ── API обгортка ─────────────────────────────────────────
   const api = useCallback(async (action, params=[]) => {
@@ -1687,14 +1694,14 @@ function AppInner({ isAdmin, onLogout }) {
     const repType  = found ? batteryTypes.find(t => t.id===found.typeId) : null
     const doSearch = () => {
       const s = repairSearch.trim()
-      setRepairSerial(s)
-      // Check if already in pending repair
       if (s) {
         const pending = repairLog.find(r => r.serial === s && r.status !== 'completed')
         if (pending) {
           showToast(`⚠ Акумулятор ${s} вже в очікуванні ремонту!`, 'err')
+          return // block proceeding
         }
       }
+      setRepairSerial(s)
     }
     
 
@@ -1807,7 +1814,7 @@ function AppInner({ isAdmin, onLogout }) {
         </Card>
 
         {serial && found && repType && <Card style={{ borderColor:G.gn }}>
-          <div style={{ color:G.gn, fontSize:12, marginBottom:12 }}>✓ Знайдено: {found.typeName} · {found.workerName} · {found.date}</div>
+          <div style={{ color:G.gn, fontSize:12, marginBottom:12 }}>✓ Знайдено: {found.typeName} · <span style={{ color:getWorkerColor(found.workerName), fontWeight:600 }}>{found.workerName}</span> · {found.date}</div>
           <FormRow label="ДАТА ПРИЙОМКИ"><input value={repDate} onChange={e => setRepDate(e.target.value)} /></FormRow>
           <FormRow label="ОПИС НЕСПРАВНОСТІ / НОТАТКА"><input value={repNote} onChange={e => setRepNote(e.target.value)} placeholder="напр. не заряджається" /></FormRow>
           <SubmitBtn onClick={handleRegisterArrival} color='#ea580c'>🔧 ПРИЙНЯТИ В РЕМОНТ</SubmitBtn>
@@ -1845,7 +1852,7 @@ function AppInner({ isAdmin, onLogout }) {
             <span style={{ fontSize:11, color:G.t2 }}>{r.datetime}</span>
           </div>
           {r.note && <div style={{ fontSize:12, color:'#fb923c', marginBottom:5 }}>📝 {r.note}</div>}
-          {r.repairWorker && <div style={{ fontSize:12, color:G.t2, marginBottom:8 }}>Ремонтував: {r.repairWorker}</div>}
+          {r.repairWorker && <div style={{ fontSize:12, color:G.t2, marginBottom:8 }}>Ремонтував: <span style={{ color:getWorkerColor(r.repairWorker), fontWeight:600 }}>{r.repairWorker}</span></div>}
           <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:r.status==='completed'?8:0 }}>
             {(r.materials||[]).filter(m => m.selected&&m.qty>0).map((m,i) =>
               <Chip key={i} bg={G.b1} color={G.t2} bd={G.b2}>{m.matName} ×{m.qty}</Chip>)}
@@ -1906,7 +1913,7 @@ function AppInner({ isAdmin, onLogout }) {
             <span style={{ fontSize:11, color:G.t2 }}>{r.datetime || r.date}</span>
           </div>
           <div style={{ fontSize:13, color:'#ef4444', marginBottom:5 }}>📝 {r.note}</div>
-          {r.repairWorker && <div style={{ fontSize:12, color:G.t2, marginBottom:8 }}>Ремонтував: {r.repairWorker}</div>}
+          {r.repairWorker && <div style={{ fontSize:12, color:G.t2, marginBottom:8 }}>Ремонтував: <span style={{ color:getWorkerColor(r.repairWorker), fontWeight:600 }}>{r.repairWorker}</span></div>}
         </div>)
       })()}
     </>)
@@ -1958,7 +1965,8 @@ function AppInner({ isAdmin, onLogout }) {
         const monthNeed = perBattery>0 ? +(perBattery * perDay * 30).toFixed(2) : (m.minStock || 0)
         const toOrder = Math.max(0, +(monthNeed - m.stock).toFixed(2))
         const link=m.shopUrl?`\n  🔗 ${m.shopUrl}`:''
-        return `• ${m.name}: ${m.stock} ${m.unit} (мін: ${m.minStock}) · потрібно/міс: ${monthNeed} · докупити: ${toOrder}${link}`
+        const orderedText = m.isOrdered ? ' [✅ Вже замовлено]' : ''
+        return `• ${m.name}${orderedText}: ${m.stock} ${m.unit} (мін: ${m.minStock}) · потрібно/міс: ${monthNeed} · докупити: ${toOrder}${link}`
       }).join('\n')
       await sendTelegram(`🛒 ZmiyCell — Закупівля (${lowMats.length > 0 ? 'Дефіцит' : 'Всі'})\n\n${lines}`)
       showToast('✓ Відправлено в Telegram')
@@ -1970,7 +1978,7 @@ function AppInner({ isAdmin, onLogout }) {
       const lines = materials.map(m => {
         const perBattery = perBatteryByMat[m.id] || 0
         const toOrder = Math.max(0, +(((perBattery > 0 ? perBattery * perDay * 30 : m.minStock) || 0) - m.stock).toFixed(2))
-        const status = m.stock <= 0 ? '🔴' : m.stock <= m.minStock ? '🟡' : '🟢'
+        const status = m.isOrdered ? '✅' : (m.stock <= 0 ? '🔴' : m.stock <= m.minStock ? '🟡' : '🟢')
         return `${status} ${m.name}: ${m.stock} ${m.unit}${toOrder > 0 ? ` · докупити: ${toOrder}` : ''}`
       }).join('\n')
       await sendTelegram(`📋 ZmiyCell — Весь склад (${materials.length} позицій)\n\n${lines}`)
@@ -2209,7 +2217,7 @@ function AppInner({ isAdmin, onLogout }) {
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:5 }}>
               <div>
                 <span style={{ fontFamily:"'Barlow Condensed',sans-serif", fontSize:15, fontWeight:700 }}>{icon} {e.toolName}</span>
-                <div style={{ fontSize:12, color:G.t2, marginTop:2 }}>{e.workerName}</div>
+                <div style={{ fontSize:12, color:getWorkerColor(e.workerName), marginTop:2, fontWeight:600 }}>{e.workerName}</div>
               </div>
               <span style={{ fontSize:11, color:G.t2, flexShrink:0 }}>{e.datetime}</span>
             </div>
@@ -2314,8 +2322,8 @@ function AppInner({ isAdmin, onLogout }) {
     const [filterUser, setFilterUser] = useState('')
     const [filterDate, setFilterDate] = useState('')
     const filtered = (actionLogs||[]).filter(e =>
-      (!filterUser || e.user.toLowerCase().includes(filterUser.toLowerCase())) &&
-      (!filterDate || e.date.includes(filterDate))
+      (!filterUser || (e.user||'').toLowerCase().includes(filterUser.toLowerCase())) &&
+      (!filterDate || (e.date||'').includes(filterDate))
     )
     if (actionLogs === null) return wrap(<Center>⟳ Завантаження...</Center>)
     const typeColor = (t) => t==='backup'?G.cy:t==='restore'?G.rd:t==='production'?G.gn:t==='repair'?'#fb923c':G.pu
@@ -2384,7 +2392,7 @@ function AppInner({ isAdmin, onLogout }) {
           <div style={{ display:'grid', gridTemplateColumns:'1fr 70px 70px 70px', gap:4, fontSize:11, color:G.t2, fontWeight:700, padding:'4px 0', borderBottom:`1px solid ${G.b2}` }}>
             <span>Матеріал</span><span style={{textAlign:'center'}}>Зріз</span><span style={{textAlign:'center'}}>Зараз</span><span style={{textAlign:'center'}}>Різниця</span>
           </div>
-          {diff.map(r => {
+          {backupDiff.map(r => {
             const d = r.diff
             const dColor = d === null ? G.t2 : d < 0 ? G.rd : d > 0 ? G.gn : G.t2
             return <div key={r.matId} style={{ display:'grid', gridTemplateColumns:'1fr 70px 70px 70px', gap:4, padding:'8px 0', borderBottom:`1px solid ${G.b1}`, fontSize:12 }}>
@@ -2407,7 +2415,7 @@ function AppInner({ isAdmin, onLogout }) {
     : entries.map((e,i) => <div key={i} style={{background:G.card2,borderRadius:10,padding:10,marginBottom:8}}>
       <div style={{display:'flex',justifyContent:'space-between'}}>
         <span style={{color:e.kind==='prep'?G.pu:e.kind==='repair'?'#fb923c':G.cy,fontWeight:600}}>
-          {e.kind==='prep'?'📦':e.kind==='repair'?'🔧':'🔋'} {e.workerName}
+          {e.kind==='prep'?'📦':e.kind==='repair'?'🔧':'🔋'} <span style={{ color:getWorkerColor(e.workerName) }}>{e.workerName}</span>
         </span>
         <span style={{color:G.rd,fontWeight:600}}>−{e.amount} {mat.unit}</span>
       </div>
@@ -2460,7 +2468,7 @@ function AppInner({ isAdmin, onLogout }) {
         {[
           ['🔋', log.filter(l=>l.kind==='production').length, G.t1, G.b1, G.b2],
           ['🔧', repairLog.filter(r => r.status !== 'completed').length, G.t1, G.b1, G.b2],
-          ['✅', repairLog.filter(r => r.status === 'completed').length, G.gn, '#052e16', '#166534'],
+          ['✅', repairLog.filter(r => r.status === 'completed' && (r.note || '').includes(todayStr())).length, G.gn, '#052e16', '#166534'],
           ['📦', activePrep.length, activePrep.length>0?G.pu:G.t2, activePrep.length>0?'#1e1b4b':G.b1, activePrep.length>0?'#3730a3':G.b2],
         ].map(([icon,val,vc,bg,bd],i) =>
           <span key={i} style={{ background:bg, border:`1px solid ${bd}`, borderRadius:20, padding:'3px 10px', fontSize:11, color:G.t2 }}>
@@ -2478,8 +2486,8 @@ function AppInner({ isAdmin, onLogout }) {
     {/* Content */}
     <div className="page-scroll" {...swipeHandlers} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} style={{ transform:`translateY(${pullDist}px)` }}>
       {pullDist>10 && (
-        <div style={{ position:'absolute', top:-40, left:0, right:0, height:40, display:'flex', alignItems:'center', justifyContent:'center', color:pullDist>65?G.or:G.t2, fontSize:12, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif" }}>
-          {pullDist>65?'✓ ВІДПУСТІТЬ ДЛЯ ОНОВЛЕННЯ':'↓ ТЯГНІТЬ ДЛЯ ОНОВЛЕННЯ'}
+        <div style={{ position:'absolute', top:-40, left:0, right:0, height:40, display:'flex', alignItems:'center', justifyContent:'center', color:pullDist>90?G.or:G.t2, fontSize:12, fontWeight:700, fontFamily:"'Barlow Condensed',sans-serif" }}>
+          {pullDist>90?'✓ ВІДПУСТІТЬ ДЛЯ ОНОВЛЕННЯ':'↓ ТЯГНІТЬ ДЛЯ ОНОВЛЕННЯ'}
         </div>
       )}
       {swipeHint && (
