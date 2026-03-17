@@ -496,8 +496,8 @@ function AppInner({ isAdmin, onLogout }) {
 
   // ── Pull-to-refresh ───────────────────────────────────────
   const handleTouchStart = (e) => { const el=e.currentTarget; if(el.scrollTop<=0){startY.current=e.touches[0].pageY;setIsPulling(true)} }
-  const handleTouchMove  = (e) => { if(!isPulling) return; const dist=e.touches[0].pageY-startY.current; if(dist>0){setPullDist(Math.min(dist*.4,80));if(dist>10&&e.cancelable)e.preventDefault()}else{setIsPulling(false);setPullDist(0)} }
-  const handleTouchEnd   = ()  => { if(pullDist>65) window.location.reload(); setIsPulling(false); setPullDist(0) }
+  const handleTouchMove  = (e) => { if(!isPulling) return; const dist=e.touches[0].pageY-startY.current; if(dist>0){setPullDist(Math.min(dist*.25,70));if(dist>15&&e.cancelable)e.preventDefault()}else{setIsPulling(false);setPullDist(0)} }
+  const handleTouchEnd   = ()  => { if(pullDist>58) window.location.reload(); setIsPulling(false); setPullDist(0) }
 
   // ── API обгортка ─────────────────────────────────────────
   const api = useCallback(async (action, params=[]) => {
@@ -556,16 +556,30 @@ function AppInner({ isAdmin, onLogout }) {
   // ── Хелпер: знайти глобальний мат за matId ───────────────
   const globalMat = (matId) => materials.find(m => m.id===matId)
 
-  // ── Розрахунок витрат (глобальний склад) ─────────────────
+  // \u0414\u043e\u043f\u043e\u043c\u0456\u0436\u043d\u0438\u043a: \u0440\u043e\u0437\u043a\u043b\u0430\u0434\u0430\u0454 \u0437\u0431\u0456\u0440\u043a\u0443 \u043d\u0430 \u0441\u0438\u0440\u0456 \u043c\u0430\u0442\u0435\u0440\u0456\u0430\u043b\u0438 (\u0434\u043b\u044f fallback)
+  const expandAssemblyFallback = useCallback((matId, deficitQty, parentName) => {
+    const recipe = assemblies.find(a => a.outputMatId === matId && a.outputQty > 0 && a.components && a.components.length > 0)
+    if (!recipe) return null
+    const batchesNeeded = Math.ceil(deficitQty / recipe.outputQty)
+    return recipe.components.map(ac => {
+      const cgm = materials.find(m => m.id === ac.matId)
+      if (!cgm) return null
+      const compAmt = +(ac.qty * batchesNeeded).toFixed(4)
+      return { matId: ac.matId, name: cgm.name, unit: cgm.unit, amount: compAmt, fromPersonal: 0, fromTeam: 0, fromStock: compAmt, totalStock: cgm.stock, isSubstitute: true, substituteFor: parentName }
+    }).filter(Boolean)
+  }, [assemblies, materials])
+
+  // \u0420\u043e\u0437\u0440\u0430\u0445\u0443\u043d\u043e\u043a \u0432\u0438\u0442\u0440\u0430\u0442 (\u0433\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u0438\u0439 \u0441\u043a\u043b\u0430\u0434) + \u0430\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u043d\u0438\u0439 fallback \u0437\u0431\u0456\u0440\u043a\u0438
   const buildConsumed = useCallback((type, workerId, qty) => {
     if (!type) return []
-    const myPrep   = prepItems.filter(p => p.workerId===workerId && p.scope!=='all' && (p.typeId===type.id || p.typeId==='ALL') && p.status!=='returned')
-    const allPrep  = prepItems.filter(p => p.scope==='all' && (p.typeId===type.id || p.typeId==='ALL') && p.status!=='returned')
-
+    const myPrep  = prepItems.filter(p => p.workerId===workerId && p.scope!=='all' && (p.typeId===type.id || p.typeId==='ALL') && p.status!=='returned')
+    const allPrep = prepItems.filter(p => p.scope==='all' && (p.typeId===type.id || p.typeId==='ALL') && p.status!=='returned')
     const tms = typeMaterials.filter(tm => tm.typeId===type.id)
-    return tms.map(tm => {
+    const result = []
+
+    tms.forEach(tm => {
       const gm = globalMat(tm.matId)
-      if (!gm) return null
+      if (!gm) return
       let need = +(tm.perBattery * qty).toFixed(4)
       const needOrig = need
       const pAvail = myPrep.filter(p => p.matId===tm.matId).reduce((s,p) => +(s+p.qty-p.returnedQty).toFixed(4), 0)
@@ -574,9 +588,29 @@ function AppInner({ isAdmin, onLogout }) {
       const aAvail = allPrep.filter(p => p.matId===tm.matId).reduce((s,p) => +(s+p.qty-p.returnedQty).toFixed(4), 0)
       const fromTeam = +Math.min(aAvail, need).toFixed(4)
       need = +(need - fromTeam).toFixed(4)
-      return { matId:tm.matId, name:gm.name, unit:gm.unit, amount:needOrig, fromPersonal, fromTeam, fromStock:need, totalStock:gm.stock }
-    }).filter(Boolean)
-  }, [prepItems, materials, typeMaterials])
+
+      const fromStockDirect = +Math.min(gm.stock, need).toFixed(4)
+      const deficit = +(need - fromStockDirect).toFixed(4)
+
+      if (deficit > 0) {
+        const subs = expandAssemblyFallback(tm.matId, deficit, gm.name)
+        if (subs) {
+          subs.forEach(sub => {
+            const ex = result.find(r => r.matId === sub.matId && r.isSubstitute)
+            if (ex) { ex.amount = +(ex.amount + sub.amount).toFixed(4); ex.fromStock = +(ex.fromStock + sub.fromStock).toFixed(4) }
+            else result.push(sub)
+          })
+          result.push({ matId:tm.matId, name:gm.name, unit:gm.unit, amount:needOrig, fromPersonal, fromTeam, fromStock:fromStockDirect, totalStock:gm.stock })
+        } else {
+          result.push({ matId:tm.matId, name:gm.name, unit:gm.unit, amount:needOrig, fromPersonal, fromTeam, fromStock:need, totalStock:gm.stock })
+        }
+      } else {
+        result.push({ matId:tm.matId, name:gm.name, unit:gm.unit, amount:needOrig, fromPersonal, fromTeam, fromStock:fromStockDirect, totalStock:gm.stock })
+      }
+    })
+    return result
+  }, [prepItems, materials, typeMaterials, assemblies, expandAssemblyFallback])
+
 
   const buildAssemblyConsumed = useCallback((assembly, workerId, qty) => {
     if (!assembly) return []
@@ -604,13 +638,13 @@ function AppInner({ isAdmin, onLogout }) {
 
   const buildRepairConsumed = useCallback((repairMaterials, workerId, typeId) => {
     if (!repairMaterials || repairMaterials.length===0) return []
-    
-    const myPrep   = prepItems.filter(p => p.workerId===workerId && p.scope!=='all' && (p.typeId===typeId || p.typeId==='ALL') && p.status!=='returned')
-    const allPrep  = prepItems.filter(p => p.scope==='all' && (p.typeId===typeId || p.typeId==='ALL') && p.status!=='returned')
+    const myPrep  = prepItems.filter(p => p.workerId===workerId && p.scope!=='all' && (p.typeId===typeId || p.typeId==='ALL') && p.status!=='returned')
+    const allPrep = prepItems.filter(p => p.scope==='all' && (p.typeId===typeId || p.typeId==='ALL') && p.status!=='returned')
 
-    return repairMaterials.map(rm => {
+    const result = []
+    repairMaterials.forEach(rm => {
       const gm = globalMat(rm.matId)
-      if (!gm) return null
+      if (!gm) return
       let need = +rm.qty.toFixed(4)
       const needOrig = need
       const pAvail = myPrep.filter(p => p.matId===rm.matId).reduce((s,p) => +(s+p.qty-p.returnedQty).toFixed(4), 0)
@@ -619,9 +653,28 @@ function AppInner({ isAdmin, onLogout }) {
       const aAvail = allPrep.filter(p => p.matId===rm.matId).reduce((s,p) => +(s+p.qty-p.returnedQty).toFixed(4), 0)
       const fromTeam = +Math.min(aAvail, need).toFixed(4)
       need = +(need - fromTeam).toFixed(4)
-      return { matId:rm.matId, name:gm.name, unit:gm.unit, amount:needOrig, fromPersonal, fromTeam, fromStock:need, totalStock:gm.stock }
-    }).filter(Boolean)
-  }, [prepItems, materials])
+
+      const fromStockDirect = +Math.min(gm.stock, need).toFixed(4)
+      const deficit = +(need - fromStockDirect).toFixed(4)
+
+      if (deficit > 0) {
+        const subs = expandAssemblyFallback(rm.matId, deficit, gm.name)
+        if (subs) {
+          subs.forEach(sub => {
+            const ex = result.find(r => r.matId === sub.matId && r.isSubstitute)
+            if (ex) { ex.amount = +(ex.amount + sub.amount).toFixed(4); ex.fromStock = +(ex.fromStock + sub.fromStock).toFixed(4) }
+            else result.push(sub)
+          })
+          result.push({ matId:rm.matId, name:gm.name, unit:gm.unit, amount:needOrig, fromPersonal, fromTeam, fromStock:fromStockDirect, totalStock:gm.stock })
+        } else {
+          result.push({ matId:rm.matId, name:gm.name, unit:gm.unit, amount:needOrig, fromPersonal, fromTeam, fromStock:need, totalStock:gm.stock })
+        }
+      } else {
+        result.push({ matId:rm.matId, name:gm.name, unit:gm.unit, amount:needOrig, fromPersonal, fromTeam, fromStock:fromStockDirect, totalStock:gm.stock })
+      }
+    })
+    return result
+  }, [prepItems, materials, expandAssemblyFallback])
 
 
   // ── Хелпер оновлення глобального stock ───────────────────
@@ -1138,8 +1191,12 @@ function AppInner({ isAdmin, onLogout }) {
           {consumed.length===0 ? <div style={{ color:G.t2, fontSize:13 }}>Матеріали не налаштовано для цього типу</div>
           : consumed.map(c => {
             const ok = c.fromStock<=c.totalStock
-            return <div key={c.matId} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'7px 0', borderBottom:`1px solid ${G.b1}`, fontSize:13 }}>
-              <span style={{ color:ok?G.t1:G.rd, flex:1, paddingRight:8 }}>{c.name}</span>
+            return <div key={c.matId+(c.isSubstitute?'_sub':'')} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'7px 0', borderBottom:`1px solid ${G.b1}`, fontSize:13, marginLeft: c.isSubstitute ? 12 : 0 }}>
+              <span style={{ color:c.isSubstitute?G.cy:ok?G.t1:G.rd, flex:1, paddingRight:8 }}>
+                {c.isSubstitute && <span style={{ color:G.t2, marginRight:4, fontSize:11 }}>↳</span>}
+                {c.name}
+                {c.isSubstitute && <span style={{ fontSize:10, color:G.t2, marginLeft:4 }}>(замість {c.substituteFor})</span>}
+              </span>
               <div style={{ display:'flex', gap:5, alignItems:'center', flexWrap:'wrap', justifyContent:'flex-end' }}>
                 {c.fromPersonal>0 && <Chip bg='#2e1065' color='#c084fc' bd='#4c1d95'>👷{c.fromPersonal}</Chip>}
                 {c.fromTeam>0    && <Chip bg='#1e3a8a' color='#93c5fd' bd='#1e40af'>🤝{c.fromTeam}</Chip>}
@@ -2365,7 +2422,8 @@ function AppInner({ isAdmin, onLogout }) {
     onTouchEndOrOnMouseUp: () => setSwipeHint(null),
     preventDefaultTouchmoveEvent: false,
     trackMouse: false,
-    delta: 160,
+    delta: 220,
+    swipeDuration: 350,
   })
 
   return <>

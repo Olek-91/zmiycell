@@ -96,11 +96,12 @@ function doGet(e) {
     .setMimeType(ContentService.MimeType.JSON)
 }
 
+// ── Точка входу POST (для великих payload-ів) ─────────────────
 function doPost(e) {
   var result
   try {
     var body = JSON.parse(e.postData.contents)
-    var action = body.action || ''
+    var action = body.action || e.parameter.action || ''
     var params = body.params || []
 
     var fn = ACTIONS[action]
@@ -108,6 +109,7 @@ function doPost(e) {
 
     result = fn.apply(null, params)
     if (result === undefined) result = { ok: true }
+
   } catch (err) {
     result = { ok: false, error: err.message }
   }
@@ -117,9 +119,8 @@ function doPost(e) {
     .setMimeType(ContentService.MimeType.JSON)
 }
 
-
-
 // ── Таблиця дій ──────────────────────────────────────────────
+
 var ACTIONS = {
   loadAll:                loadAll,
   initSheets:             initSheets,
