@@ -486,6 +486,8 @@ function AppInner({ isAdmin, onLogout }) {
   const openConfirm = useCallback((title, body, onYes) => setModal({type:'confirm',title,body,onYes}), [])
   const openInput  = useCallback((title, placeholder, defaultVal, onConfirm) => setModal({type:'input',title,placeholder,defaultVal,onConfirm}), [])
   const closeModal = () => setModal(null)
+  // Strips display-only fields from consumed arrays before sending to GAS (keeps URL short)
+  const stripConsumed = (arr) => (arr||[]).map(c => ({ matId:c.matId, amount:c.amount, fromPersonal:c.fromPersonal||0, fromTeam:c.fromTeam||0, fromStock:c.fromStock||0 }))
   
   const getWorkerColor = useCallback((name) => {
     if (!name) return G.t2
@@ -706,7 +708,8 @@ function AppInner({ isAdmin, onLogout }) {
         closeModal()
         const entry = { id:uid(), datetime:nowStr(), date:prodDate, typeId:type.id, typeName:type.name, workerId:worker.id, workerName:worker.name, count:prodQty, serials, consumed, kind:'production', repairNote:'' }
         try {
-          await api('writeOff', [entry])
+          const entryForGas = { ...entry, consumed: stripConsumed(consumed) }
+          await api('writeOff', [entryForGas])
           // Оновлюємо глобальний stock
           consumed.forEach(c => { if (c.fromStock>0) updateGlobalStock(c.matId, -c.fromStock) })
           // Зменшуємо prepItems
@@ -934,8 +937,7 @@ function AppInner({ isAdmin, onLogout }) {
         // Here we send the advanced payload to the backend
         const entry = { assemblyId:asm.id, qty:asmQty, workerId:worker.id, workerName:worker.name, date:asmDate, datetime:nowStr(), destination: asmDestination, consumed, outputAmt }
         try {
-          // We will update GAS to handle produceAssemblyAdvanced
-          await api('produceAssemblyAdvanced', [entry])
+          await api('produceAssemblyAdvanced', [{ ...entry, consumed: stripConsumed(consumed) }])
           
           // Списуємо компоненти локально
           consumed.forEach(c => { if (c.fromStock>0) updateGlobalStock(c.matId, -c.fromStock) })
