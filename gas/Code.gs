@@ -693,6 +693,7 @@ function writeOff(entry) {
     var ss      = SpreadsheetApp.getActiveSpreadsheet()
     var matSh   = ss.getSheetByName(SHEET.MATERIALS)
     var matData = matSh.getDataRange().getValues()
+    entry.consumed = decompressConsumed(entry.consumed, matData)
 
     entry.consumed.forEach(function(c) {
       var fromStock = c.fromStock !== undefined ? c.fromStock : c.amount
@@ -1543,7 +1544,7 @@ function produceAssemblyAdvanced(entry) {
     }
     if(!asm) return {ok:false, error:'Збірку не знайдено'}
 
-    var consumedList = entry.consumed || []
+    var consumedList = decompressConsumed(entry.consumed, matData)
 
     // 1. Списуємо матеріали з глобального складу
     consumedList.forEach(function(c) {
@@ -1696,9 +1697,9 @@ function updateRepairStatus(repairId, status, dateCompleted, workerName, materia
     // Deduct materials if completing
     var consumed = []
     if (status === 'completed' && materialsJson) {
-      var mats = json(materialsJson, [])
       var matSh = ss.getSheetByName(SHEET.MATERIALS)
       var matData = matSh.getDataRange().getValues()
+      var mats = decompressMats(materialsJson, matData)
       mats.forEach(function(m) {
         if (!m.selected || !m.qty) return
         for (var j = 1; j < matData.length; j++) {
@@ -1754,6 +1755,50 @@ function updateRepairStatus(repairId, status, dateCompleted, workerName, materia
 function num(v)       { return parseFloat(v) || 0 }
 function int(v)       { return parseInt(v)   || 0 }
 function json(s, def) { try { return s ? JSON.parse(s) : def } catch(_) { return def } }
+
+function decompressConsumed(val, matData) {
+  if (!val) return []
+  if (typeof val !== 'string') return val
+  if (val.charAt(0) === '[') return json(val, [])
+  var list = val.split('|').filter(Boolean).map(function(s) {
+    var p = s.split(':')
+    return { matId: p[0], amount: num(p[1]), fromPersonal: num(p[2]), fromTeam: num(p[3]), fromStock: num(p[4]) }
+  })
+  if (matData) {
+    var mapObj = {}
+    for (var i=1; i<matData.length; i++) {
+      mapObj[String(matData[i][0])] = { name: String(matData[i][1]), unit: String(matData[i][2]) }
+    }
+    list.forEach(function(c) {
+      var m = mapObj[c.matId] || { name: 'Невідомо', unit: '' }
+      if (!c.name) c.name = m.name
+      if (!c.unit) c.unit = m.unit
+    })
+  }
+  return list
+}
+
+function decompressMats(val, matData) {
+  if (!val) return []
+  if (typeof val !== 'string') return val
+  if (val.charAt(0) === '[') return json(val, [])
+  var list = val.split('|').filter(Boolean).map(function(s) {
+    var p = s.split(':')
+    return { matId: p[0], qty: num(p[1]), selected: true }
+  })
+  if (matData) {
+    var mapObj = {}
+    for (var i=1; i<matData.length; i++) {
+      mapObj[String(matData[i][0])] = { name: String(matData[i][1]), unit: String(matData[i][2]) }
+    }
+    list.forEach(function(c) {
+      var m = mapObj[c.matId] || { name: 'Невідомо', unit: '' }
+      c.matName = m.name
+      c.unit = m.unit
+    })
+  }
+  return list
+}
 
 // ══════════════════════════════════════════════════════════════
 //  ЛОГ ДІЙ
