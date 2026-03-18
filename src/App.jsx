@@ -11,6 +11,13 @@ const G = {
   rd: '#f87171', yw: '#fbbf24',
 }
 
+function getWorkerColor(name) {
+  if (!name) return G.t2
+  let hash = 0
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
+  return `hsl(${Math.abs(hash) % 360}, 75%, 65%)`
+}
+
 const GLOBAL_CSS = `
 @keyframes slideUp{from{transform:translateY(10px);opacity:0}to{transform:translateY(0);opacity:1}}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -505,12 +512,7 @@ function AppInner({ isAdmin, onLogout }) {
   const compressConsumed = (arr) => (arr || []).map(c => `${c.matId}:${c.amount || 0}:${c.fromPersonal || 0}:${c.fromTeam || 0}:${c.fromStock || 0}`).join('|')
   const compressMats = (arr) => (arr || []).filter(m => m.selected && m.qty > 0).map(m => `${m.matId}:${m.qty || 0}`).join('|')
 
-  const getWorkerColor = useCallback((name) => {
-    if (!name) return G.t2
-    let hash = 0
-    for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
-    return `hsl(${Math.abs(hash) % 360}, 75%, 65%)`
-  }, [])
+  // getWorkerColor — модульна функція (визначена вище PrepTab)
 
   // ── Pull-to-refresh ───────────────────────────────────────
   const handleTouchStart = (e) => { const el = e.currentTarget; if (el.scrollTop <= 0) { startY.current = e.touches[0].pageY; setIsPulling(true) } }
