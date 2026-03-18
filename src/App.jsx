@@ -280,7 +280,7 @@ function AppInner({ isAdmin, onLogout }) {
   const [batteryTypes, setBatteryTypes] = useState([]); const [workers, setWorkers] = useState([]); const [materials, setMaterials] = useState([])
   const [assemblies, setAssemblies] = useState([]); const [prepItems, setPrepItems] = useState([]); const [log, setLog] = useState([])
   const [repairLog, setRepairLog] = useState([]); const [tools, setTools] = useState([]); const [actionLogs, setActionLogs] = useState([])
-  const [snapshotDate, setSnapshotDate] = useState('')
+  const [payments, setPayments] = useState([]); const [toolLog, setToolLog] = useState([]); const [snapshotDate, setSnapshotDate] = useState('')
 
   const [prodTab, setProdTab] = useState('writeoff'); const [prodTypeId, setProdTypeId] = useState('')
   const [prodWorker, setProdWorker] = useState(''); const [prodQty, setProdQty] = useState('1')
@@ -292,12 +292,13 @@ function AppInner({ isAdmin, onLogout }) {
   const api = async (fn, args = []) => { setSync('saving'); try { const res = await gasCall(fn, args); setSync('ok'); return res; } catch (e) { setSync('error'); showToast('Помилка сервера', 'err'); throw e; } }
   const loadAll = useCallback(async () => {
     setSync('loading'); try {
-      const d = await gasCall('getAllData');
-      setBatteryTypes(d.batteryTypes); setWorkers(d.workers); setMaterials(d.materials); setAssemblies(d.assemblies);
-      setPrepItems(d.prepItems); setLog(d.logs || []); setRepairLog(d.repairEntries || []); setTools(d.tools || []); setSnapshotDate(d.snapshotDate);
-      if (d.batteryTypes.length && !prodTypeId) setProdTypeId(d.batteryTypes[0].id);
-      if (d.workers.length && !prodWorker) { setProdWorker(d.workers[0].id); setAsmWorker(d.workers[0].id); }
-      if (d.assemblies.length && !asmId) setAsmId(d.assemblies[0].id);
+      const d = await gasCall('loadAll', []);
+      setBatteryTypes(d.batteryTypes || []); setWorkers(d.workers || []); setMaterials(d.materials || []); setAssemblies(d.assemblies || []);
+      setPrepItems(d.prepItems || []); setLog(d.log || []); setRepairLog(d.repairLog || []); setTools(d.tools || []);
+      setPayments(d.payments || []); setToolLog(d.toolLog || []); setSnapshotDate(d.snapshotDate || '');
+      if (d.batteryTypes?.length && !prodTypeId) setProdTypeId(d.batteryTypes[0].id);
+      if (d.workers?.length && !prodWorker) { setProdWorker(d.workers[0].id); setAsmWorker(d.workers[0].id); }
+      if (d.assemblies?.length && !asmId) setAsmId(d.assemblies[0].id);
       setSync('ok'); setLastSync(new Date());
     } catch (e) { setSync('error'); }
   }, [prodTypeId, prodWorker, asmId])
@@ -305,8 +306,12 @@ function AppInner({ isAdmin, onLogout }) {
   useEffect(() => { loadAll() }, [loadAll])
 
   const producedByName = useMemo(() => {
-    const r = {}; log.forEach(e => r[e.workerName] = (r[e.workerName] || 0) + (e.count || 0)); return r
+    const r = {}; log.filter(e => e.kind === 'production').forEach(e => { if (e.workerName) r[e.workerName] = (r[e.workerName] || 0) + (parseInt(e.count) || 0) }); return r
   }, [log])
+
+  const paidByWorker = useMemo(() => {
+    const r = {}; payments.forEach(p => { const k = p.workerId || p.workerName; if (k) r[k] = (r[k] || 0) + (parseInt(p.count) || 0) }); return r
+  }, [payments])
 
   const swipeHandlers = useSwipeable({
     onSwipedLeft: () => { const nav = isAdmin ? NAV_ADMIN : NAV_USER; const idx = nav.findIndex(n => n[0] === page); if (idx < nav.length - 1) setPage(nav[idx+1][0]) },
@@ -335,23 +340,23 @@ function AppInner({ isAdmin, onLogout }) {
           doWriteoff={async () => { if (!prodSerials.filter(s => s).length && (parseInt(prodQty)||0) > 0) return showToast('Введіть С/Н', 'err'); await api('produceBatteries', [{ typeId: prodTypeId, workerId: prodWorker, count: parseInt(prodQty)||0, serials: prodSerials, date: prodDate }]); showToast('✓ Списано'); loadAll() }}
           asmId={asmId} setAsmId={setAsmId} asmQty={asmQty} setAsmQty={setAsmQty} asmWorker={asmWorker} setAsmWorker={setAsmWorker} asmDate={asmDate} setAsmDate={setAsmDate}
           doIssuePrepAssembly={async () => { await api('issueAssemblyToPrep', [asmWorker, asmId, parseFloat(asmQty)||0, 'ALL', false]); showToast('✓ Видано'); loadAll() }}
-          onIssueAssembly={(w, a, q, t, f) => api('issueAssemblyToPrep', [w, a, q, t, f]).then(loadAll)}
-          onIssueConsumable={(w, m, q) => api('issueConsumableToPrep', [w, m, q]).then(loadAll)}
-          onReturn={(id, all, qty) => api('returnPrepItem', [id, all, parseFloat(qty) || 0]).then(loadAll)}
-          onWriteoffPrep={(id) => api('writeoffPrepItem', [id]).then(loadAll)}
+          onIssueAssembly={(w, a, q, t, f) => api('addPrepItemsDirect', [{ workerId: w, assemblyId: a, qty: q, typeId: t, forAll: f }]).then(loadAll)}
+          onIssueConsumable={(w, m, q) => api('addPrepItemsBatch', [{ workerId: w, matId: m, qty: q }]).then(loadAll)}
+          onReturn={(id, all, qty) => api('returnPrep', [id, qty]).then(loadAll)}
+          onWriteoffPrep={(id) => api('returnPrep', [id, 999999]).then(loadAll)}
         />}
         {page === 'repair' && <PageRepair
           repTab={repTab} setRepTab={setRepTab} repairLog={repairLog} repairSearch={repairSearch} setRepairSearch={setRepairSearch} doSearch={() => showToast('Пошук поки що локальний')}
           startCompleting={async (r) => { await api('updateRepairStatus', [r.id, 'completed', prodWorker, todayStr(), '[]']); showToast('✓ Готово'); loadAll() }}
         />}
         {page === 'log' && <PageLog log={log} getWorkerColor={getWorkerColor} />}
-        {page === 'stock' && <PageStock materials={materials} stockSearch={stockSearch} setStockSearch={setStockSearch} stockTab={stockTab} setStockTab={setStockTab} isAdmin={isAdmin} rsVals={rsVals} setRsVals={setRsVals} restock={mId => api('restockMaterial', [mId, parseFloat(rsVals[mId])]).then(() => { setRsVals(v => ({...v, [mId]: ''})); loadAll(); showToast('✓ Поповнено') })} />}
+        {page === 'stock' && <PageStock materials={materials} stockSearch={stockSearch} setStockSearch={setStockSearch} stockTab={stockTab} setStockTab={setStockTab} isAdmin={isAdmin} rsVals={rsVals} setRsVals={setRsVals} restock={mId => api('updateMaterialStock', [mId, parseFloat(rsVals[mId])]).then(() => { setRsVals(v => ({...v, [mId]: ''})); loadAll(); showToast('✓ Поповнено') })} />}
         {page === 'shopping' && <PageShopping materials={materials} sendTelegram={sendTelegram} showToast={showToast} />}
-        {page === 'workers' && <PageWorkers workers={workers} producedByName={producedByName} paidByWorker={{}} getWorkerColor={getWorkerColor} />}
+        {page === 'workers' && <PageWorkers workers={workers} producedByName={producedByName} paidByWorker={paidByWorker} getWorkerColor={getWorkerColor} />}
         {page === 'tools' && <PageTools tools={tools} />}
         {page === 'manual' && <PageManual batteryTypes={batteryTypes} />}
         {page === 'actlog' && <PageActionLog actionLogs={actionLogs} />}
-        {page === 'backup' && <PageBackup snapshotDate={snapshotDate} makeBackup={() => api('makeSnapshot').then(loadAll)} doRestore={() => api('restoreFromLastSnapshot').then(loadAll)} />}
+        {page === 'backup' && <PageBackup snapshotDate={snapshotDate} makeBackup={() => api('saveStockBackup', ['Адмін']).then(loadAll)} doRestore={() => api('restoreFromBackup', ['Адмін']).then(loadAll)} />}
       </div>
 
       <Toast message={toast.msg} type={toast.type} onHide={() => setToast({ msg: '', type: '' })} />
