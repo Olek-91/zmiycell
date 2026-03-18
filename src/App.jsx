@@ -833,7 +833,7 @@ function AppInner({ isAdmin, onLogout }) {
       async () => {
         closeModal()
         try {
-          await api('addPrepItemsBatch', [[prepItem]])
+          await api('addPrepItemsDirect', [[prepItem]])
           // Списуємо компоненти зі складу
           asm.components.forEach(ac => updateGlobalStock(ac.matId, -(+(ac.qty * qty).toFixed(4))))
           setPrepItems(prev => [prepItem, ...prev])

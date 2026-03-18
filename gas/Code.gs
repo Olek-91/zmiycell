@@ -140,6 +140,7 @@ var ACTIONS = {
   writeOff:               writeOff,
   addPrepItem:            addPrepItem,
   addPrepItemsBatch:      addPrepItemsBatch,
+  addPrepItemsDirect:     addPrepItemsDirect,
   updatePrepField:        updatePrepField,
   returnPrep:             returnPrep,
   issueConsumable:        issueConsumable,
@@ -895,6 +896,25 @@ function addPrepItemsBatch(items) {
   })
 }
 
+// Зберігає заготовки без перевірки/списання складу (компоненти вже списані вручну)
+function addPrepItemsDirect(items) {
+  return withLock(function() {
+    if (!items || !items.length) return { ok: false, error: 'Немає даних' }
+    var ss     = SpreadsheetApp.getActiveSpreadsheet()
+    var prepSh = ss.getSheetByName(SHEET.PREP)
+    ensureColumn(prepSh, 'scope')
+    items.forEach(function(it) {
+      prepSh.appendRow([
+        it.id, it.workerId, it.workerName,
+        it.typeId, it.matId, it.matName,
+        it.unit, it.qty, 0,
+        it.date, it.datetime, 'active', it.scope || 'self',
+      ])
+    })
+    return { ok: true }
+  })
+}
+
 function returnPrep(prepId, returnQty) {
   return withLock(function() {
     var ss   = SpreadsheetApp.getActiveSpreadsheet()
@@ -955,7 +975,7 @@ function addRepair(entry) {
     var ss      = SpreadsheetApp.getActiveSpreadsheet()
     var matSh   = ss.getSheetByName(SHEET.MATERIALS)
     var matData = matSh.getDataRange().getValues()
-    var prepSh  = ss.getSheetByName(SHEET.PREP_ITEMS)
+    var prepSh  = ss.getSheetByName(SHEET.PREP)
     if (!prepSh) prepSh = ss.insertSheet(SHEET.PREP_ITEMS)
     var prepData = prepSh.getDataRange().getValues()
     
