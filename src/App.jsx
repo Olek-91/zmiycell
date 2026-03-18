@@ -577,16 +577,35 @@ function AppInner({ isAdmin, onLogout }) {
   const globalMat = (matId) => materials.find(m => m.id === matId)
 
   // \u0414\u043e\u043f\u043e\u043c\u0456\u0436\u043d\u0438\u043a: \u0440\u043e\u0437\u043a\u043b\u0430\u0434\u0430\u0454 \u0437\u0431\u0456\u0440\u043a\u0443 \u043d\u0430 \u0441\u0438\u0440\u0456 \u043c\u0430\u0442\u0435\u0440\u0456\u0430\u043b\u0438 (\u0434\u043b\u044f fallback)
-  const expandAssemblyFallback = useCallback((matId, deficitQty, parentName) => {
-    const recipe = assemblies.find(a => a.outputMatId === matId && a.outputQty > 0 && a.components && a.components.length > 0)
-    if (!recipe) return null
-    const batchesNeeded = Math.ceil(deficitQty / recipe.outputQty)
-    return recipe.components.map(ac => {
-      const cgm = materials.find(m => m.id === ac.matId)
-      if (!cgm) return null
-      const compAmt = +(ac.qty * batchesNeeded).toFixed(4)
-      return { matId: ac.matId, name: cgm.name, unit: cgm.unit, amount: compAmt, fromPersonal: 0, fromTeam: 0, fromStock: compAmt, totalStock: cgm.stock, isSubstitute: true, substituteFor: parentName }
-    }).filter(Boolean)
+  const expandAssemblyFallback = useCallback((rootMatId, rootDeficitQty, rootParentName) => {
+    const resolve = (matId, deficitQty, parentName) => {
+      const recipe = assemblies.find(a => a.outputMatId === matId && a.outputQty > 0 && a.components && a.components.length > 0)
+      if (!recipe) return null
+      const batchesNeeded = Math.ceil(deficitQty / recipe.outputQty)
+      let allSubs = []
+      recipe.components.forEach(ac => {
+        const cgm = materials.find(m => m.id === ac.matId)
+        if (!cgm) return
+        const compAmt = +(ac.qty * batchesNeeded).toFixed(4)
+        const stock = cgm.stock || 0
+        if (stock >= compAmt) {
+          allSubs.push({ matId: ac.matId, name: cgm.name, unit: cgm.unit, amount: compAmt, fromPersonal: 0, fromTeam: 0, fromStock: compAmt, totalStock: stock, isSubstitute: true, substituteFor: parentName })
+        } else {
+          if (stock > 0) {
+            allSubs.push({ matId: ac.matId, name: cgm.name, unit: cgm.unit, amount: stock, fromPersonal: 0, fromTeam: 0, fromStock: stock, totalStock: stock, isSubstitute: true, substituteFor: parentName })
+          }
+          const compDeficit = +(compAmt - stock).toFixed(4)
+          const nestedSubs = resolve(ac.matId, compDeficit, cgm.name)
+          if (nestedSubs) {
+            allSubs.push(...nestedSubs)
+          } else {
+            allSubs.push({ matId: ac.matId, name: cgm.name, unit: cgm.unit, amount: compDeficit, fromPersonal: 0, fromTeam: 0, fromStock: compDeficit, totalStock: stock, isSubstitute: true, substituteFor: parentName })
+          }
+        }
+      })
+      return allSubs.length > 0 ? allSubs : null
+    }
+    return resolve(rootMatId, rootDeficitQty, rootParentName)
   }, [assemblies, materials])
 
   // \u0420\u043e\u0437\u0440\u0430\u0445\u0443\u043d\u043e\u043a \u0432\u0438\u0442\u0440\u0430\u0442 (\u0433\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u0438\u0439 \u0441\u043a\u043b\u0430\u0434) + \u0430\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u043d\u0438\u0439 fallback \u0437\u0431\u0456\u0440\u043a\u0438
