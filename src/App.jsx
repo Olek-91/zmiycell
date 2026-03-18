@@ -728,9 +728,7 @@ function AppInner({ isAdmin, onLogout }) {
         try {
           const entryForGas = { ...entry, consumed: compressConsumed(consumed) }
           await api('writeOff', [entryForGas])
-          // Оновлюємо глобальний stock
           consumed.forEach(c => { if (c.fromStock > 0) updateGlobalStock(c.matId, -c.fromStock) })
-          // Зменшуємо prepItems
           setPrepItems(prev => {
             const next = prev.map(p => ({ ...p }))
             consumed.forEach(c => {
@@ -754,7 +752,6 @@ function AppInner({ isAdmin, onLogout }) {
           setLog(prev => [entry, ...prev])
           setProdSerials([])
           showToast(`✓ Списано ${prodQty} акум. (${serials.join(', ')})`)
-          // Telegram — низький запас
           const lowMats = consumed.filter(c => {
             const m = globalMat(c.matId)
             return m && (m.stock - (c.fromStock > 0 ? c.fromStock : 0)) <= m.minStock && m.minStock > 0
@@ -791,51 +788,61 @@ function AppInner({ isAdmin, onLogout }) {
     if (!asm || !worker || !qty || qty <= 0) return showToast("Заповніть всі поля", 'err')
     if (!asm.components || asm.components.length < 2) return showToast('Збірка повинна містити хоча б 2 матеріали', 'err')
 
-    const items = asm.components.map(ac => {
+    // Перевіряємо наявність компонентів на складі
+    const shortage = asm.components.find(ac => {
       const gm = materials.find(m => m.id === ac.matId)
-      return {
-        id: uid(),
-        workerId: worker.id,
-        workerName: worker.name,
-        typeId,
-        matId: ac.matId,
-        matName: gm?.name || ac.matId,
-        unit: gm?.unit || '',
-        qty: +(ac.qty * qty).toFixed(4),
-        returnedQty: 0,
-        date: todayStr(),
-        datetime: nowStr(),
-        status: 'active',
-        scope: forAll ? 'all' : 'self',
-      }
+      return !gm || gm.stock < +(ac.qty * qty).toFixed(4)
     })
+    if (shortage) {
+      const gm = materials.find(m => m.id === shortage.matId)
+      return showToast('Не вистачає: ' + (gm?.name || shortage.matId), 'err')
+    }
 
-    const shortage = items.find(it => {
-      const gm = materials.find(m => m.id === it.matId)
-      return !gm || gm.stock < it.qty
-    })
-    if (shortage) return showToast('Не вистачає: ' + shortage.matName, 'err')
+    // Одна позиція в заготовці — готовий виріб (вихідний матеріал збірки)
+    const outputQty = +(asm.outputQty * qty).toFixed(4)
+    const outputMat = materials.find(m => m.id === asm.outputMatId)
+    const prepItem = {
+      id: uid(),
+      workerId: worker.id,
+      workerName: worker.name,
+      typeId,
+      matId: asm.outputMatId,
+      matName: outputMat?.name || asm.name,
+      unit: outputMat?.unit || asm.unit || 'шт',
+      qty: outputQty,
+      returnedQty: 0,
+      date: todayStr(),
+      datetime: nowStr(),
+      status: 'active',
+      scope: forAll ? 'all' : 'self',
+    }
 
     openConfirm('Видача на заготовку',
       <div style={{ fontSize: 13, color: G.t2, lineHeight: 1.8 }}>
-        <b style={{ color: G.t1 }}>{asm.name}</b><br />
-        Кількість: {qty} шт<br />
+        <b style={{ color: G.t1 }}>{prepItem.matName}</b> × <b style={{ color: G.pu }}>{outputQty} {prepItem.unit}</b><br />
         Працівник: {worker.name}<br />
         Доступ: {forAll ? 'для всіх' : 'особисто'}
+        <div style={{ marginTop: 8, fontSize: 11, color: G.t2 }}>
+          Компоненти (будуть списані зі складу):
+          {asm.components.map(ac => {
+            const gm = materials.find(m => m.id === ac.matId)
+            return <div key={ac.id}>• {gm?.name || ac.matId}: -{+(ac.qty * qty).toFixed(4)} {gm?.unit || ''}</div>
+          })}
+        </div>
       </div>,
       async () => {
         closeModal()
         try {
-          await api('addPrepItemsBatch', [items])
-          items.forEach(it => updateGlobalStock(it.matId, -it.qty))
-          setPrepItems(prev => [...items, ...prev])
-          // Записуємо в журнал
+          await api('addPrepItemsBatch', [[prepItem]])
+          // Списуємо компоненти зі складу
+          asm.components.forEach(ac => updateGlobalStock(ac.matId, -(+(ac.qty * qty).toFixed(4))))
+          setPrepItems(prev => [prepItem, ...prev])
           const logEntry = {
             id: uid() + 'P',
             datetime: nowStr(),
             date: todayStr(),
-            typeId: typeId,
-            typeName: allTypes ? 'Всі типи' : (batteryTypes.find(t => t.id === typeId)?.name || ''),
+            typeId,
+            typeName: typeId === 'ALL' ? 'Всі типи' : (batteryTypes.find(t => t.id === typeId)?.name || ''),
             workerName: worker.name,
             count: 0,
             serials: [],
@@ -844,16 +851,17 @@ function AppInner({ isAdmin, onLogout }) {
               return { name: gm?.name || ac.matId, unit: gm?.unit || '', amount: +(ac.qty * qty).toFixed(4) }
             }),
             kind: 'prep',
-            repairNote: `📦 Видача: ${asm.name} × ${qty}`,
-            prepIds: items.map(it => it.id),
+            repairNote: `📦 Видача: ${prepItem.matName} × ${outputQty} ${prepItem.unit}`,
+            prepIds: [prepItem.id],
           }
           setLog(prev => [logEntry, ...prev])
           api('logPrepEntry', [logEntry]).catch(() => {})
-          showToast(`✓ Видано заготовку: ${asm.name}`)
+          showToast(`✓ Видано заготовку: ${prepItem.matName}`)
         } catch { }
       }
     )
   }
+
 
   const doChangePrepScope = async (prepId, scope) => {
     try {
