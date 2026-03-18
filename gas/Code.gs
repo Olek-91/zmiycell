@@ -176,6 +176,7 @@ var ACTIONS = {
 
   // Лог дій
   logAction:              logAction,
+  logPrepEntry:           logPrepEntry,
   getActionLogs:          getActionLogs,
 
   // Бекап матеріалів
@@ -1950,4 +1951,29 @@ function restoreFromBackup(user) {
   logAction(user || 'Адмін', 'restore', 'Склад відновлено з бекапу')
   return { ok: true }
 }
+
+// ══════════════════════════════════════════════════════════════
+//  ЛОГ ВИДАЧІ ЗАГОТОВОК
+// ══════════════════════════════════════════════════════════════
+function logPrepEntry(entry) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet()
+  var sh = ss.getSheetByName(SHEET.LOG)
+  if (!sh) return { ok: false, error: 'Log sheet not found' }
+  // Columns: id, datetime, date, typeId, typeName, workerName, count, serials(JSON), consumed(JSON), kind, note
+  sh.appendRow([
+    entry.id,
+    entry.datetime,
+    entry.date,
+    entry.typeId || 'ALL',
+    entry.typeName || '',
+    entry.workerName || '',
+    0,
+    JSON.stringify(entry.serials || []),
+    JSON.stringify(entry.consumed || []),
+    'prep',
+    entry.note || '',
+  ])
+  return { ok: true }
+}
+
 

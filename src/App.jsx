@@ -829,6 +829,26 @@ function AppInner({ isAdmin, onLogout }) {
           await api('addPrepItemsBatch', [items])
           items.forEach(it => updateGlobalStock(it.matId, -it.qty))
           setPrepItems(prev => [...items, ...prev])
+          // Записуємо в журнал
+          const logEntry = {
+            id: uid() + 'P',
+            datetime: nowStr(),
+            date: todayStr(),
+            typeId: typeId,
+            typeName: allTypes ? 'Всі типи' : (batteryTypes.find(t => t.id === typeId)?.name || ''),
+            workerName: worker.name,
+            count: 0,
+            serials: [],
+            consumed: asm.components.map(ac => {
+              const gm = materials.find(m => m.id === ac.matId)
+              return { name: gm?.name || ac.matId, unit: gm?.unit || '', amount: +(ac.qty * qty).toFixed(4) }
+            }),
+            kind: 'prep',
+            repairNote: `📦 Видача: ${asm.name} × ${qty}`,
+            prepIds: items.map(it => it.id),
+          }
+          setLog(prev => [logEntry, ...prev])
+          api('logPrepEntry', [logEntry]).catch(() => {})
           showToast(`✓ Видано заготовку: ${asm.name}`)
         } catch { }
       }
@@ -892,6 +912,23 @@ function AppInner({ isAdmin, onLogout }) {
           await api('addPrepItemsBatch', [[item]])
           updateGlobalStock(gm.id, -qty)
           setPrepItems(prev => [item, ...prev])
+          // Записуємо в журнал
+          const logEntry = {
+            id: uid() + 'C',
+            datetime: nowStr(),
+            date: todayStr(),
+            typeId: 'ALL',
+            typeName: 'Розхідник',
+            workerName: worker.name,
+            count: 0,
+            serials: [],
+            consumed: [{ name: gm.name, unit: gm.unit, amount: +qty.toFixed(4) }],
+            kind: 'prep',
+            repairNote: `📦 Видача: ${gm.name} × ${qty} ${gm.unit}`,
+            prepIds: [item.id],
+          }
+          setLog(prev => [logEntry, ...prev])
+          api('logPrepEntry', [logEntry]).catch(() => {})
           showToast(`✓ Видано розхідник: ${gm.name}`)
         } catch { }
       }
@@ -1930,19 +1967,34 @@ function AppInner({ isAdmin, onLogout }) {
     log.length === 0 ? <Center>Журнал порожній</Center> :
       log.slice(0, 120).map(e => {
         const t = batteryTypes.find(t => t.id === e.typeId)
-        const color = e.kind === 'prep' ? G.pu : e.kind === 'repair' ? '#fb923c' : (t?.color || G.or)
-        const icon = e.kind === 'prep' ? '📦' : e.kind === 'repair' ? '🔧' : '🔋'
+        const isPrepEntry = e.kind === 'prep'
+        const color = isPrepEntry ? G.pu : e.kind === 'repair' ? '#fb923c' : (t?.color || G.or)
+        const icon = isPrepEntry ? '📦' : e.kind === 'repair' ? '🔧' : '🔋'
+        // Статус видачі: чи ще активна хоча б одна позиція?
+        const prepActive = isPrepEntry && e.prepIds && e.prepIds.length > 0
+          ? e.prepIds.some(pid => {
+              const p = prepItems.find(x => String(x.id) === String(pid))
+              return p && p.status !== 'returned'
+            })
+          : false
         return <div key={e.id} style={{ background: G.card, border: `1px solid ${G.b1}`, borderRadius: 12, padding: 12, marginBottom: 8, borderLeft: `3px solid ${color}` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 5 }}>
             <div>
-              <span style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 15, fontWeight: 700 }}>{icon} {e.typeName}</span>
-              {e.count > 0 && <span style={{ color: G.or, fontSize: 13, marginLeft: 6 }}>× {e.count}</span>}
+              <span style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 15, fontWeight: 700 }}>{icon} {isPrepEntry ? (e.repairNote || e.typeName) : e.typeName}</span>
+              {!isPrepEntry && e.count > 0 && <span style={{ color: G.or, fontSize: 13, marginLeft: 6 }}>× {e.count}</span>}
               <div style={{ fontSize: 12, color: getWorkerColor(e.workerName), fontWeight: 600 }}>{e.workerName}</div>
             </div>
-            <span style={{ fontSize: 11, color: G.t2, flexShrink: 0 }}>{e.datetime}</span>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+              <span style={{ fontSize: 11, color: G.t2, flexShrink: 0 }}>{e.datetime}</span>
+              {isPrepEntry && (
+                prepActive
+                  ? <Chip bg='#1e1b4b' color='#a78bfa' bd='#3730a3'>📦 на руках</Chip>
+                  : <Chip bg={G.b1} color={G.t2} bd={G.b2}>✓ списано</Chip>
+              )}
+            </div>
           </div>
           {e.serials?.length > 0 && <div style={{ fontSize: 12, color: G.cy, marginBottom: 5, wordBreak: 'break-all' }}>{e.serials.join(', ')}</div>}
-          {e.repairNote && <div style={{ fontSize: 12, color: '#fb923c', marginBottom: 5 }}>📝 {e.repairNote}</div>}
+          {!isPrepEntry && e.repairNote && <div style={{ fontSize: 12, color: '#fb923c', marginBottom: 5 }}>📝 {e.repairNote}</div>}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
             {(e.consumed || []).map((c, i) => <span key={i} style={{ background: G.b1, border: `1px solid ${G.b2}`, borderRadius: 6, padding: '2px 8px', fontSize: 11, color: G.t2 }}>{c.name} ×{c.amount}</span>)}
           </div>
