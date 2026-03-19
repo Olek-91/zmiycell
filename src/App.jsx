@@ -212,7 +212,7 @@ function PrepTab({ batteryTypes, workers, assemblies, materials, prepItems, onIs
   const [typeId, setTypeId] = useState(batteryTypes[0]?.id || '')
   const [asmId, setAsmId] = useState(assemblies[0]?.id || '')
   const [consId, setConsId] = useState(materials[0]?.id || '')
-  const [qty, setQty] = useState(1)
+  const [qty, setQty] = useState('1')
   const [allTypes, setAllTypes] = useState(false)
 
   // Update state when data loads if initial state was empty
@@ -275,7 +275,7 @@ function PrepTab({ batteryTypes, workers, assemblies, materials, prepItems, onIs
         </select>
       </FormRow>
       <FormRow label="КІЛЬКІСТЬ">
-        <input type="number" value={qty} onChange={e => setQty(parseFloat(e.target.value) || 1)} min="0.01" step="0.01" />
+        <input type="number" value={qty} onChange={e => setQty(e.target.value)} min="0.01" step="0.01" />
       </FormRow>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
         <input id="prep-for-all" type="checkbox" checked={forAll} onChange={e => setForAll(e.target.checked)} />
@@ -311,7 +311,7 @@ function PrepTab({ batteryTypes, workers, assemblies, materials, prepItems, onIs
         </select>
       </FormRow>
       <FormRow label="КІЛЬКІСТЬ">
-        <input type="number" value={qty} onChange={e => setQty(parseFloat(e.target.value) || 1)} min="0.01" step="0.01" />
+        <input type="number" value={qty} onChange={e => setQty(e.target.value)} min="0.01" step="0.01" />
       </FormRow>
       <SubmitBtn color={G.pu} onClick={() => onIssueConsumable(wId, consId, qty)}>📦 ВИДАТИ</SubmitBtn>
     </Card>}
@@ -390,7 +390,7 @@ function AppInner({ isAdmin, onLogout }) {
   const [prodTab, setProdTab] = useState('writeoff')
   // PageAssembly стан
   const [asmId, setAsmId] = useState('')
-  const [asmQty, setAsmQty] = useState(1)
+  const [asmQty, setAsmQty] = useState('1')
   const [asmWorker, setAsmWorker] = useState('')
   const [asmDate, setAsmDate] = useState(todayStr())
   const [asmDestination, setAsmDestination] = useState('stock') // 'stock' | 'personal' | 'team'
@@ -447,7 +447,6 @@ function AppInner({ isAdmin, onLogout }) {
   const [repDate, setRepDate] = useState(todayStr())
   const [repNote, setRepNote] = useState('')
   const [matChecks, setMatChecks] = useState({})
-  const [matQtys, setMatQtys] = useState({})
   const [manTypeId, setManTypeId] = useState('')
   const [manWorkerId, setManWorkerId] = useState('')
   const [manDate, setManDate] = useState(todayStr())
@@ -461,7 +460,7 @@ function AppInner({ isAdmin, onLogout }) {
   const [newWorkerName, setNewWorkerName] = useState('')
   // PageTools
   const [toolTab, setToolTab] = useState('active')
-  const [newTool, setNewTool] = useState({ name: '', category: 'tool', count: 1, serial: '', notes: '' })
+  const [newTool, setNewTool] = useState({ name: '', category: 'tool', count: '1', serial: '', notes: '' })
   const [toolRepairModal, setToolRepairModal] = useState(null)
   const [toolRepairNote, setToolRepairNote] = useState('')
   const [toolRepairDate, setToolRepairDate] = useState(todayStr())
@@ -1191,7 +1190,7 @@ function AppInner({ isAdmin, onLogout }) {
           </select>
         </FormRow>
         <FormRow label="КІЛЬКІСТЬ ПАРТІЙ">
-          <input type="number" min="1" value={asmQty} onChange={e => setAsmQty(parseInt(e.target.value) || 1)} />
+          <input type="number" min="1" value={asmQty} onChange={e => setAsmQty(e.target.value)} />
         </FormRow>
         <FormRow label="ПРАЦІВНИК">
           <select value={asmWorker} onChange={e => setAsmWorker(e.target.value)}>
@@ -2188,7 +2187,7 @@ function AppInner({ isAdmin, onLogout }) {
       const t = { id: 't' + uid(), ...nt, working: nt.count, repairNote: '', repairDate: '' }
       api('saveTool', [t]).then(() => {
         setTools(p => [...p, t])
-        setNt({ name: '', category: 'tool', count: 1, serial: '', notes: '' })
+        setNt({ name: '', category: 'tool', count: '1', serial: '', notes: '' })
         showToast('✓ Додано ' + nt.name)
         api('logToolEvent', [t.id, t.name, todayStr(), nowStr(), 'added', 'Адмін', 'Додано на склад']).catch(() => { })
         setToolLog(p => [{ id: 'tl_' + Date.now(), toolId: t.id, toolName: t.name, date: todayStr(), datetime: nowStr(), event: 'added', workerName: 'Адмін', note: 'Додано на склад' }, ...p])
@@ -2285,7 +2284,7 @@ function AppInner({ isAdmin, onLogout }) {
             <option value="equipment">⚙ Обладнання</option>
           </select>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 6 }}>
-            <input type="number" placeholder="Кількість" value={nt.count} min="1" onChange={e => setNt(v => ({ ...v, count: parseInt(e.target.value) || 1 }))} />
+            <input type="number" placeholder="Кількість" value={nt.count} min="1" onChange={e => setNt(v => ({ ...v, count: e.target.value }))} />
             <input placeholder="С/н (необов.)" value={nt.serial} onChange={e => setNt(v => ({ ...v, serial: e.target.value }))} />
           </div>
           <input placeholder="Нотатка" value={nt.notes} onChange={e => setNt(v => ({ ...v, notes: e.target.value }))} style={{ marginBottom: 4 }} />
