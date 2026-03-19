@@ -976,7 +976,7 @@ function addRepair(entry) {
     var matSh   = ss.getSheetByName(SHEET.MATERIALS)
     var matData = matSh.getDataRange().getValues()
     var prepSh  = ss.getSheetByName(SHEET.PREP)
-    if (!prepSh) prepSh = ss.insertSheet(SHEET.PREP_ITEMS)
+    if (!prepSh) prepSh = ss.insertSheet(SHEET.PREP)
     var prepData = prepSh.getDataRange().getValues()
     
     var consumedLog = []
@@ -1562,8 +1562,8 @@ function produceAssemblyAdvanced(entry) {
     var ss      = SpreadsheetApp.getActiveSpreadsheet()
     var asmSh   = ss.getSheetByName(SHEET.ASSEMBLIES)
     var matSh   = ss.getSheetByName(SHEET.MATERIALS)
-    var prepSh  = ss.getSheetByName(SHEET.PREP_ITEMS)
-    if (!prepSh) prepSh = ss.insertSheet(SHEET.PREP_ITEMS)
+    var prepSh  = ss.getSheetByName(SHEET.PREP)
+    if (!prepSh) prepSh = ss.insertSheet(SHEET.PREP)
       
     var matData = matSh.getDataRange().getValues()
     var prepData = prepSh.getDataRange().getValues()
