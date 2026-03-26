@@ -2,15 +2,10 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig(({ mode }) => {
-  // Завантажуємо .env змінні
   const env = loadEnv(mode, process.cwd(), '')
   process.env.GAS_URL = env.GAS_URL
 
   return {
-    server: {
-      host: true,
-      port: 5173
-    },
     plugins: [
       react(),
       {
@@ -18,25 +13,21 @@ export default defineConfig(({ mode }) => {
         configureServer(server) {
           server.middlewares.use('/api/gas', async (req, res) => {
             try {
-              // Зчитуємо тіло POST запиту
               if (req.method === 'POST') {
                 let body = ''
                 for await (const chunk of req) body += chunk
-                try { req.body = JSON.parse(body || '{}') } catch(e) {}
+                try { req.body = JSON.parse(body || '{}') } catch { /* ignore */ }
               }
-              
-              // Парсимо query параметри
-              const url = new URL(req.url, `http://${req.headers.host}`)
+              const url = new URL(req.url || '', `http://${req.headers.host}`)
               req.query = Object.fromEntries(url.searchParams)
               
-              // Імпортуємо наш Vercel handler
+              // @ts-expect-error - Ignore TS error on JS import
               const handler = (await import('./api/gas.js')).default
               
-              // Емулюємо Vercel Response API
               const mockRes = {
-                setHeader: (k, v) => res.setHeader(k, v),
-                status: (code) => { res.statusCode = code; return mockRes },
-                json: (data) => {
+                setHeader: (k: string, v: string) => res.setHeader(k, v),
+                status: (code: number) => { res.statusCode = code; return mockRes },
+                json: (data: unknown) => {
                   res.setHeader('Content-Type', 'application/json')
                   res.end(JSON.stringify(data))
                 },
@@ -44,9 +35,10 @@ export default defineConfig(({ mode }) => {
               }
               
               await handler(req, mockRes)
-            } catch(e) {
+            } catch(e: unknown) {
               res.statusCode = 500
-              res.end(e.message)
+              const msg = e instanceof Error ? e.message : String(e)
+              res.end(msg)
             }
           })
         }

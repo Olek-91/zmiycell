@@ -27,9 +27,9 @@ var SHEET = {
   MAT_BACKUP:'MaterialsBackup',
 }
 
-// Telegram — заповніть свої дані (тільки в GAS-редакторі, не в git!)
-var TG_TOKEN   = 'ВСТАВТЕ_TOKEN'   // @BotFather
-var TG_CHAT_ID = 'ВСТАВТЕ_CHAT_ID' // @userinfobot або @getidsbot
+// Telegram — заповніть свої дані
+var TG_TOKEN   = '8697742454:AAFOwspQgr22QE53UU8piGG_y1k4uy87LLE'   // @BotFather
+var TG_CHAT_ID = '-5239255917' // @userinfobot або @getidsbot
 
 // ── Telegram відправка ────────────────────────────────────────
 function tgSend(text) {
@@ -229,7 +229,7 @@ function initSheets() {
 
   // Збірки (напівфабрикати)
   ensureSheet(ss, SHEET.ASSEMBLIES,
-    ['id', 'name', 'outputMatId', 'outputQty', 'unit', 'notes', 'manual'],
+    ['id', 'name', 'outputMatId', 'outputQty', 'unit', 'notes', 'manual', 'isUniversal'],
     []
   )
   ensureSheet(ss, SHEET.ASSEM_COMP,
@@ -238,13 +238,14 @@ function initSheets() {
   )
 
   ensureSheet(ss, SHEET.WORKERS,
-    ['id', 'name'],
+    ['id', 'name', 'color'],
     [
-      ['w1', 'Іваненко О.'], ['w2', 'Петренко В.'],
-      ['w3', 'Сидоренко М.'], ['w4', 'Коваленко Т.'],
-      ['w5', 'Бойченко Р.'], ['w6', 'Мельник Д.'],
+      ['w1', 'Іваненко О.', ''], ['w2', 'Петренко В.', ''],
+      ['w3', 'Сидоренко М.', ''], ['w4', 'Коваленко Т.', ''],
+      ['w5', 'Бойченко Р.', ''], ['w6', 'Мельник Д.', ''],
     ]
   )
+  ensureColumn(ss.getSheetByName(SHEET.WORKERS), 'color')
 
   ensureSheet(ss, SHEET.ACTION_LOG,
     ['id', 'date', 'datetime', 'user', 'actionType', 'details'],
@@ -421,6 +422,7 @@ function loadAll() {
       unit:        a.unit || '',
       notes:       a.notes || '',
       manual:      a.manual || '',
+      isUniversal: a.isUniversal === true || a.isUniversal === 'true',
       components:  acRows
         .filter(function(ac) { return ac.assemblyId === a.id })
         .map(function(ac) { return { id:ac.id, assemblyId:ac.assemblyId, matId:ac.matId, qty:num(ac.qty) } }),
@@ -435,7 +437,7 @@ function loadAll() {
     assemblies:    assemblies,
 
     workers: wRows.map(function(r) {
-      return { id: r.id, name: r.name }
+      return { id: r.id, name: r.name, color: r.color || '' }
     }),
 
     tools: tRows.map(function(r) {
@@ -592,7 +594,7 @@ function updateMaterialStock(a, b, c) {
     var data = sh.getDataRange().getValues()
     for (var i = 1; i < data.length; i++) {
       if (String(data[i][0]) === String(matId)) {
-        var newVal = Math.max(0, +((+data[i][3] || 0) + delta).toFixed(4))
+        var newVal = +((+data[i][3] || 0) + delta).toFixed(4)
         sh.getRange(i + 1, 4).setValue(newVal)
         return { ok: true, stock: newVal }
       }
@@ -713,7 +715,7 @@ function writeOff(entry) {
       for (var i = 1; i < matData.length; i++) {
         if (String(matData[i][0]) === String(c.matId)) {
           var cur = +matData[i][3] || 0
-          var nv  = Math.max(0, +(cur - fromStock).toFixed(4))
+          var nv  = +(cur - fromStock).toFixed(4)
           matSh.getRange(i + 1, 4).setValue(nv)
           matData[i][3] = nv
           break
@@ -1179,15 +1181,25 @@ function reportToolRepair(toolId, repairNote, repairDate, workerName) {
 // ══════════════════════════════════════════════════════════════
 function saveWorker(worker) {
   var ss   = SpreadsheetApp.getActiveSpreadsheet()
-  var sh   = ensureSheet(ss, SHEET.WORKERS, ['id', 'name'], [])
+  var sh   = ensureSheet(ss, SHEET.WORKERS, ['id', 'name', 'color'], [])
+  var colIdx = ensureColumn(sh, 'color')
   var data = sh.getDataRange().getValues()
   for (var i = 1; i < data.length; i++) {
     if (data[i][0] === worker.id) {
       sh.getRange(i + 1, 2).setValue(worker.name)
+      if (worker.color !== undefined) sh.getRange(i + 1, colIdx).setValue(worker.color)
       return { ok: true }
     }
   }
-  sh.appendRow([worker.id, worker.name])
+  
+  var row = []
+  var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0]
+  for (var k=0; k<headers.length; k++) row.push('')
+  row[0] = worker.id
+  row[1] = worker.name
+  row[colIdx-1] = worker.color || ''
+  sh.appendRow(row)
+  
   return { ok: true }
 }
 
@@ -1356,24 +1368,26 @@ function buildDefaultMaterials() {
 //  Assemblies:        id, name, outputMatId, outputQty, unit, notes
 //  AssemblyComponents: id, assemblyId, matId, qty
 // ══════════════════════════════════════════════════════════════
-function addAssembly(name, outputMatId, outputQty, unit, notes, manual) {
+function addAssembly(name, outputMatId, outputQty, unit, notes, manual, isUniversal) {
   var ss = SpreadsheetApp.getActiveSpreadsheet()
   var sh = ss.getSheetByName(SHEET.ASSEMBLIES)
   if (!sh) {
     sh = ss.insertSheet(SHEET.ASSEMBLIES)
-    sh.getRange(1,1,1,7).setValues([['id','name','outputMatId','outputQty','unit','notes','manual']])
+    sh.getRange(1,1,1,8).setValues([['id','name','outputMatId','outputQty','unit','notes','manual','isUniversal']])
   }
+  ensureColumn(sh, 'isUniversal')
   var id = 'asm_' + Date.now()
-  sh.appendRow([id, name, outputMatId, num(outputQty), unit||'', notes||'', manual||''])
+  sh.appendRow([id, name, outputMatId, num(outputQty), unit||'', notes||'', manual||'', isUniversal === true || isUniversal === 'true'])
   return { ok:true, id:id }
 }
 
 function updateAssemblyField(asmId, field, value) {
-  var colMap = { name:2, outputMatId:3, outputQty:4, unit:5, notes:6, manual:7 }
+  var colMap = { name:2, outputMatId:3, outputQty:4, unit:5, notes:6, manual:7, isUniversal:8 }
   var col = colMap[field]
   if (!col) return { ok:false, error:'Невідоме поле: '+field }
   var ss   = SpreadsheetApp.getActiveSpreadsheet()
   var sh   = ss.getSheetByName(SHEET.ASSEMBLIES)
+  ensureColumn(sh, 'isUniversal')
   var data = sh.getDataRange().getValues()
   for (var i=1; i<data.length; i++) {
     if (String(data[i][0])===String(asmId)) {
