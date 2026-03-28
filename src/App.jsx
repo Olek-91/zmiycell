@@ -63,7 +63,12 @@ const FormRow = ({ label, children }) =>
 const Card = ({ children, style = {} }) =>
   <div style={{ background: G.card, border: `1px solid ${G.b1}`, borderRadius: 14, padding: 14, marginBottom: 10, ...style }}>{children}</div>
 const CardTitle = ({ children, color = G.or }) =>
-  <div style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 17, fontWeight: 700, color, letterSpacing: .5, marginBottom: 10 }}>{children}</div>
+  <div style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 17, fontWeight: 700, color, letterSpacing: .5, marginBottom: 10 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      {children}
+      <span style={{ fontSize: 10, color: G.t2, opacity: 0.5, fontWeight: 400 }}>v1.5-calc-fix</span>
+    </div>
+  </div>
 const QtyBtn = ({ onClick, children }) =>
   <button onClick={(e) => { haptic(50); onClick(e); }} style={{ width: 38, height: 38, borderRadius: 8, background: G.b1, border: `1px solid ${G.b2}`, color: G.t1, fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontFamily: 'monospace' }}>{children}</button>
 const SubmitBtn = ({ children, onClick, color = G.or, disabled = false }) =>
@@ -643,6 +648,7 @@ function AppInner({ isAdmin, onLogout }) {
   // PageShopping — калькулятор виробництва
   const [calcTypeId, setCalcTypeId] = useState('')
   const [calcQty, setCalcQty] = useState('10')
+  const [calcIgnoreAsm, setCalcIgnoreAsm] = useState(false)
 
 
   // ── UI стан ──────────────────────────────────────────────
@@ -2497,27 +2503,41 @@ function AppInner({ isAdmin, onLogout }) {
       const tms = typeMaterials.filter(tm => tm.typeId == calcTypeId)
       if (tms.length === 0) return showToast('Матеріали не налаштовані', 'err')
 
-      const explode = (mId, q) => {
-        const a = assemblies.find(as => as.outputMatId == mId)
-        if (!a || !a.isUniversal) return [{ matId: mId, q }]
-        const b = q / a.outputQty
-        return a.components.flatMap(ac => explode(ac.matId, ac.qty * b))
+      const getDeficitRecursive = (mId, q) => {
+        const gm = materials.find(m => String(m.id) === String(mId))
+        if (!gm) return []
+        
+        // Перевіряємо, чи є для цього матеріалу збірка
+        const a = assemblies.find(as => String(as.outputMatId) === String(mId))
+        
+        // Якщо ми ігноруємо готові збірки АБО якщо це збірка, якої нема на складі — розкладаємо
+        if (a) {
+          const inStock = calcIgnoreAsm ? 0 : (gm.stock || 0)
+          const deficit = Math.max(0, q - inStock)
+          if (deficit <= 0) return []
+          const factor = deficit / a.outputQty
+          return a.components.flatMap(ac => getDeficitRecursive(ac.matId, ac.qty * factor))
+        }
+
+        // Це сирий матеріал (або збірка, яку неможливо розкласти)
+        const inStock = gm.stock || 0
+        const deficit = Math.max(0, q - inStock)
+        if (deficit <= 0) return []
+        return [{ matId: mId, q: deficit }]
       }
 
-      const flattened = tms.flatMap(tm => explode(tm.matId, tm.perBattery * qty))
+      const totalDeficits = tms.flatMap(tm => getDeficitRecursive(tm.matId, tm.perBattery * qty))
       const merged = []
-      flattened.forEach(f => {
-        const ex = merged.find(m => m.matId == f.matId)
-        if (ex) ex.q = +(ex.q + f.q).toFixed(4)
-        else merged.push({ ...f })
+      totalDeficits.forEach(d => {
+        const ex = merged.find(m => m.matId == d.matId)
+        if (ex) ex.q = +(ex.q + d.q).toFixed(4)
+        else merged.push({ ...d })
       })
 
-      const deficit = merged.map(n => {
+      const deficitLines = merged.map(n => {
         const gm = materials.find(m => m.id == n.matId)
         if (!gm) return null
-        const toOrder = Math.max(0, +(n.q - gm.stock).toFixed(4))
-        if (toOrder <= 0) return null
-        return `• ${gm.name}: ${toOrder} ${gm.unit}`
+        return `• ${gm.name}: ${n.q} ${gm.unit}`
       }).filter(Boolean)
 
       if (deficit.length === 0) {
@@ -2525,7 +2545,7 @@ function AppInner({ isAdmin, onLogout }) {
       }
 
       const typeName = batteryTypes.find(t => t.id == calcTypeId)?.name || '?'
-      const msg = `📦 ZmiyCell — Різниця на виробництво\n\nДля виготовлення ${qty} шт. "${typeName}" на складі необхідно додатково:\n\n${deficit.join('\n')}`
+      const msg = `📦 ZmiyCell — Різниця на виробництво\n\nДля виготовлення ${qty} шт. "${typeName}" на складі необхідно додатково:\n\n${deficitLines.join('\n')}`
       await sendTelegram(msg)
       showToast('✓ Відправлено в Telegram')
     }
@@ -2556,6 +2576,22 @@ function AppInner({ isAdmin, onLogout }) {
           </div>
         </div>
 
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 12, 
+          marginBottom: 15, 
+          padding: '12px 16px', 
+          background: calcIgnoreAsm ? 'rgba(249,115,22,0.1)' : 'rgba(255,255,255,0.03)', 
+          borderRadius: 12, 
+          cursor: 'pointer',
+          border: `1px solid ${calcIgnoreAsm ? G.or : 'transparent'}`,
+          transition: '.2s'
+        }} onClick={() => setCalcIgnoreAsm(!calcIgnoreAsm)}>
+          <input type="checkbox" checked={calcIgnoreAsm} readOnly style={{ width: 18, height: 18, cursor: 'pointer', accentColor: G.or }} />
+          <span style={{ fontSize: 13, color: calcIgnoreAsm ? G.or : G.t1, fontWeight: 800 }}>ІГНОРУВАТИ ГОТОВІ ЗБІРКИ (тільки матеріали)</span>
+        </div>
+
         {(() => {
           const qty = parseFloat(calcQty) || 0
           if (!calcTypeId || !qty) return (
@@ -2570,16 +2606,28 @@ function AppInner({ isAdmin, onLogout }) {
             </div>
           )
 
-          const explode = (mId, q) => {
-            const a = assemblies.find(as => as.outputMatId == mId)
-            // Вибухаємо, якщо збірка універсальна АБО якщо вона відноситься до поточного типу (підходить)
+          const getDeficitRecursive = (mId, q) => {
+            const gm = materials.find(m => String(m.id) === String(mId))
+            if (!gm) return []
+            
+            const a = assemblies.find(as => String(as.outputMatId) === String(mId))
             const fits = a && (a.isUniversal || typeMaterials.some(tm => tm.typeId == calcTypeId && tm.matId == a.outputMatId))
-            if (!a || !fits) return [{ matId: mId, q }]
-            const b = q / a.outputQty
-            return a.components.flatMap(ac => explode(ac.matId, ac.qty * b))
+            
+            if (fits) {
+              const inStock = calcIgnoreAsm ? 0 : (gm.stock || 0)
+              const deficit = Math.max(0, q - inStock)
+              if (deficit <= 0) return []
+              const factor = deficit / a.outputQty
+              return a.components.flatMap(ac => getDeficitRecursive(ac.matId, ac.qty * factor))
+            }
+
+            const inStock = gm.stock || 0
+            const deficit = Math.max(0, q - inStock)
+            if (deficit <= 0) return []
+            return [{ matId: mId, q: deficit }]
           }
 
-          const flattened = tms.flatMap(tm => explode(tm.matId, tm.perBattery * qty))
+          const flattened = tms.flatMap(tm => getDeficitRecursive(tm.matId, tm.perBattery * qty))
           const merged = []
           flattened.forEach(f => {
             const ex = merged.find(m => m.matId == f.matId)
@@ -2590,35 +2638,28 @@ function AppInner({ isAdmin, onLogout }) {
           const rows = merged.map(n => {
             const gm = materials.find(m => m.id == n.matId)
             if (!gm) return null
-            const need = n.q
-            const inStock = gm.stock
-            const toOrder = Math.max(0, +(need - inStock).toFixed(4))
-            return { name: gm.name, unit: gm.unit, need, inStock, toOrder, matId: n.matId }
+            return { name: gm.name, unit: gm.unit, toOrder: n.q, matId: n.matId }
           }).filter(Boolean)
 
           const anyDeficit = rows.some(r => r.toOrder > 0)
 
           return <>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 4, fontSize: 11, color: G.t2, fontFamily: "'Barlow Condensed',sans-serif", fontWeight: 700, letterSpacing: .5, padding: '0 4px 6px', borderBottom: `1px solid ${G.b1}` }}>
-              <span>МАТЕРІАЛ</span>
-              <span style={{ textAlign: 'right' }}>ПОТРІБНО</span>
-              <span style={{ textAlign: 'right' }}>СКЛАД</span>
-              <span style={{ textAlign: 'right' }}>ДОЗАМ.</span>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 4, fontSize: 11, color: G.t2, fontFamily: "'Barlow Condensed',sans-serif", fontWeight: 700, letterSpacing: .5, padding: '0 4px 6px', borderBottom: `1px solid ${G.b1}` }}>
+              <span>МАТЕРІАЛ (СИРОВИНА)</span>
+              <span style={{ textAlign: 'right' }}>ДОЗАМОВИТИ</span>
             </div>
             {rows.map((r, i) => (
               <div key={i} style={{
-                display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 4,
+                display: 'grid', gridTemplateColumns: '1fr auto', gap: 4,
                 fontSize: 13, padding: '8px 4px',
                 borderBottom: `1px solid ${G.b1}`,
-                background: r.toOrder > 0 ? 'rgba(239,68,68,0.05)' : 'transparent',
-                borderLeft: r.toOrder > 0 ? `3px solid ${G.rd}` : `3px solid transparent`,
+                background: 'rgba(239,68,68,0.05)',
+                borderLeft: `3px solid ${G.rd}`,
                 borderRadius: 4
               }}>
                 <span style={{ color: G.t1, fontWeight: 600 }}>{r.name}</span>
-                <span style={{ color: G.cy, textAlign: 'right', whiteSpace: 'nowrap' }}>{r.need} {r.unit}</span>
-                <span style={{ color: r.inStock >= r.need ? G.gn : G.yw, textAlign: 'right', whiteSpace: 'nowrap' }}>{r.inStock} {r.unit}</span>
-                <span style={{ color: r.toOrder > 0 ? G.rd : G.t2, fontWeight: r.toOrder > 0 ? 700 : 400, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                  {r.toOrder > 0 ? `+${r.toOrder}` : '✓'}
+                <span style={{ color: G.rd, fontWeight: 700, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  +{r.toOrder} {r.unit}
                 </span>
               </div>
             ))}
