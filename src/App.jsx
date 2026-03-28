@@ -648,7 +648,7 @@ function AppInner({ isAdmin, onLogout }) {
   // PageShopping — калькулятор виробництва
   const [calcTypeId, setCalcTypeId] = useState('')
   const [calcQty, setCalcQty] = useState('10')
-  const [calcIgnoreAsm, setCalcIgnoreAsm] = useState(false)
+  const [calcShowRawOnly, setCalcShowRawOnly] = useState(false)
 
 
   // ── UI стан ──────────────────────────────────────────────
@@ -2503,30 +2503,24 @@ function AppInner({ isAdmin, onLogout }) {
       const tms = typeMaterials.filter(tm => tm.typeId == calcTypeId)
       if (tms.length === 0) return showToast('Матеріали не налаштовані', 'err')
 
-      const getDeficitRecursive = (mId, q) => {
+      const getDeficitRecursive = (mId, q, forceExplode) => {
         const gm = materials.find(m => String(m.id) === String(mId))
         if (!gm) return []
         
-        // Перевіряємо, чи є для цього матеріалу збірка
-        const a = assemblies.find(as => String(as.outputMatId) === String(mId))
-        
-        // Якщо ми ігноруємо готові збірки АБО якщо це збірка, якої нема на складі — розкладаємо
-        if (a) {
-          const inStock = calcIgnoreAsm ? 0 : (gm.stock || 0)
-          const deficit = Math.max(0, q - inStock)
-          if (deficit <= 0) return []
-          const factor = deficit / a.outputQty
-          return a.components.flatMap(ac => getDeficitRecursive(ac.matId, ac.qty * factor))
-        }
-
-        // Це сирий матеріал (або збірка, яку неможливо розкласти)
         const inStock = gm.stock || 0
         const deficit = Math.max(0, q - inStock)
         if (deficit <= 0) return []
+
+        const a = assemblies.find(as => String(as.outputMatId) === String(mId))
+        if (a && forceExplode) {
+          const factor = deficit / a.outputQty
+          return a.components.flatMap(ac => getDeficitRecursive(ac.matId, ac.qty * factor, true))
+        }
+        
         return [{ matId: mId, q: deficit }]
       }
 
-      const totalDeficits = tms.flatMap(tm => getDeficitRecursive(tm.matId, tm.perBattery * qty))
+      const totalDeficits = tms.flatMap(tm => getDeficitRecursive(tm.matId, tm.perBattery * qty, true))
       const merged = []
       totalDeficits.forEach(d => {
         const ex = merged.find(m => m.matId == d.matId)
@@ -2582,14 +2576,14 @@ function AppInner({ isAdmin, onLogout }) {
           gap: 12, 
           marginBottom: 15, 
           padding: '12px 16px', 
-          background: calcIgnoreAsm ? 'rgba(249,115,22,0.1)' : 'rgba(255,255,255,0.03)', 
+          background: calcShowRawOnly ? 'rgba(6,182,212,0.1)' : 'rgba(255,255,255,0.03)', 
           borderRadius: 12, 
           cursor: 'pointer',
-          border: `1px solid ${calcIgnoreAsm ? G.or : 'transparent'}`,
+          border: `1px solid ${calcShowRawOnly ? G.cy : 'transparent'}`,
           transition: '.2s'
-        }} onClick={() => setCalcIgnoreAsm(!calcIgnoreAsm)}>
-          <input type="checkbox" checked={calcIgnoreAsm} readOnly style={{ width: 18, height: 18, cursor: 'pointer', accentColor: G.or }} />
-          <span style={{ fontSize: 13, color: calcIgnoreAsm ? G.or : G.t1, fontWeight: 800 }}>ІГНОРУВАТИ ГОТОВІ ЗБІРКИ (тільки матеріали)</span>
+        }} onClick={() => setCalcShowRawOnly(!calcShowRawOnly)}>
+          <input type="checkbox" checked={calcShowRawOnly} readOnly style={{ width: 18, height: 18, cursor: 'pointer', accentColor: G.cy }} />
+          <span style={{ fontSize: 13, color: calcShowRawOnly ? G.cy : G.t1, fontWeight: 800 }}>РОЗКЛАСТИ ДО СИРИХ МАТЕРІАЛІВ</span>
         </div>
 
         {(() => {
@@ -2606,26 +2600,24 @@ function AppInner({ isAdmin, onLogout }) {
             </div>
           )
 
-          const getDeficitRecursive = (mId, q) => {
+          const getDeficitRecursive = (mId, q, forceExplode) => {
             const gm = materials.find(m => String(m.id) === String(mId))
             if (!gm) return []
             
-            const a = assemblies.find(as => String(as.outputMatId) === String(mId))
-            if (a) {
-              const inStock = calcIgnoreAsm ? 0 : (gm.stock || 0)
-              const deficit = Math.max(0, q - inStock)
-              if (deficit <= 0) return []
-              const factor = deficit / a.outputQty
-              return a.components.flatMap(ac => getDeficitRecursive(ac.matId, ac.qty * factor))
-            }
-
             const inStock = gm.stock || 0
             const deficit = Math.max(0, q - inStock)
             if (deficit <= 0) return []
+
+            const a = assemblies.find(as => String(as.outputMatId) === String(mId))
+            if (a && forceExplode) {
+              const factor = deficit / a.outputQty
+              return a.components.flatMap(ac => getDeficitRecursive(ac.matId, ac.qty * factor, true))
+            }
+
             return [{ matId: mId, q: deficit }]
           }
 
-          const flattened = tms.flatMap(tm => getDeficitRecursive(tm.matId, tm.perBattery * qty))
+          const flattened = tms.flatMap(tm => getDeficitRecursive(tm.matId, tm.perBattery * qty, calcShowRawOnly))
           const merged = []
           flattened.forEach(f => {
             const ex = merged.find(m => m.matId == f.matId)
@@ -2643,8 +2635,8 @@ function AppInner({ isAdmin, onLogout }) {
 
           return <>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 4, fontSize: 11, color: G.t2, fontFamily: "'Barlow Condensed',sans-serif", fontWeight: 700, letterSpacing: .5, padding: '0 4px 6px', borderBottom: `1px solid ${G.b1}` }}>
-              <span>МАТЕРІАЛ (СИРОВИНА)</span>
-              <span style={{ textAlign: 'right' }}>ДОЗАМОВИТИ</span>
+              <span>{calcShowRawOnly ? 'СИРІ МАТЕРІАЛИ (ДЛЯ ЗАКУПІВЛІ)' : 'МАТЕРІАЛИ ТА ЗБІРКИ (ДЛЯ ПРАЦІВНИКА)'}</span>
+              <span style={{ textAlign: 'right' }}>ДЕФІЦИТ</span>
             </div>
             {rows.map((r, i) => (
               <div key={i} style={{
