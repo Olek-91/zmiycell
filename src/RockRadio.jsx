@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStore } from './store.js';
 import { gasCall } from './api.js';
 
@@ -10,40 +10,28 @@ const G = {
 }
 
 const AdFreeRockPlayer = () => {
-  const { radioStations, setRadioStations } = useStore();
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentStationIndex, setCurrentStationIndex] = useState(0);
+  const { radioStations, setRadioStations, playback, setPlayback } = useStore();
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState('');
   const [newUrl, setNewUrl] = useState('');
   const [busy, setBusy] = useState(false);
-  const audioRef = useRef(null);
 
   const stations = radioStations.length > 0 ? radioStations : [
     { id: 'default', name: "Завантаження...", url: "" }
   ];
 
+  const currentStationIndex = playback.stationIndex;
+  const isPlaying = playback.isPlaying;
+
   const togglePlay = () => {
     if (!stations[currentStationIndex]?.url) return;
-    if (isPlaying) {
-      audioRef.current.pause();
-    } else {
-      audioRef.current.play().catch(e => console.error("Playback failed:", e));
-    }
-    setIsPlaying(!isPlaying);
+    setPlayback({ isPlaying: !isPlaying });
   };
 
   const changeStation = (event) => {
     const newIndex = parseInt(event.target.value, 10);
-    setCurrentStationIndex(newIndex);
-    setIsPlaying(false);
+    setPlayback({ stationIndex: newIndex, isPlaying: false });
   };
-
-  useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.load();
-    }
-  }, [currentStationIndex, stations]);
 
   const addStation = async () => {
     if (!newName.trim() || !newUrl.trim()) return;
@@ -72,7 +60,9 @@ const AdFreeRockPlayer = () => {
       const res = await gasCall('deleteRadioStation', [id]);
       if (res.ok) {
         setRadioStations(prev => prev.filter(s => s.id !== id));
-        if (currentStationIndex >= radioStations.length - 1) setCurrentStationIndex(0);
+        if (currentStationIndex >= radioStations.length - 1) {
+          setPlayback({ stationIndex: 0 });
+        }
       }
     } catch (e) {
       console.error(e);
@@ -154,8 +144,6 @@ const AdFreeRockPlayer = () => {
           ))}
         </div>
 
-        <audio ref={audioRef} src={stations[currentStationIndex]?.url} preload="none" />
-        
         <button 
           onClick={togglePlay} 
           disabled={!stations[currentStationIndex]?.url}

@@ -14,6 +14,7 @@ export const useStore = create((set, get) => ({
   toolLog: [],
   repairLog: [],
   radioStations: [],
+  playback: { isPlaying: false, stationIndex: 0 },
   
   sync: 'loading',
   
@@ -78,5 +79,6 @@ export const useStore = create((set, get) => ({
   setToolLog: (v) => set(s => ({ toolLog: typeof v === 'function' ? v(s.toolLog) : v })),
   setRepairLog: (v) => set(s => ({ repairLog: typeof v === 'function' ? v(s.repairLog) : v })),
   setRadioStations: (v) => set(s => ({ radioStations: typeof v === 'function' ? v(s.radioStations) : v })),
+  setPlayback: (v) => set(s => ({ playback: { ...s.playback, ...(typeof v === 'function' ? v(s.playback) : v) } })),
   setSync: (v) => set(s => ({ sync: typeof v === 'function' ? v(s.sync) : v })),
 }))

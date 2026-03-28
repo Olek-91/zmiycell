@@ -555,10 +555,27 @@ export default function App() {
 function AppInner({ isAdmin, onLogout }) {
   // ── З'єднання з Zustand ──────────────────────────────────────
   const {
-    materials, typeMaterials, assemblies, batteryTypes, workers, tools, log, repairLog, prepItems, payments, toolLog, radioStations,
-    sync, loadAll, refresh,
-    setMaterials, setTypeMaterials, setAssemblies, setBatteryTypes, setWorkers, setLog, setPrepItems, setPayments, setTools, setToolLog, setRepairLog, setRadioStations, setSync
+    materials, typeMaterials, assemblies, batteryTypes, workers, tools, log, repairLog, prepItems, payments, toolLog,
+    sync, loadAll, refresh, playback, radioStations,
+    setMaterials, setTypeMaterials, setAssemblies, setBatteryTypes, setWorkers, setLog, setPrepItems, setPayments, setTools, setToolLog, setRepairLog, setRadioStations, setPlayback, setSync
   } = useStore()
+
+  const globalAudioRef = useRef(null)
+
+  useEffect(() => {
+    const audio = globalAudioRef.current
+    if (!audio) return
+    const currentUrl = radioStations[playback.stationIndex]?.url
+    if (playback.isPlaying) {
+      if (audio.src !== currentUrl) {
+        audio.src = currentUrl
+        audio.load()
+      }
+      audio.play().catch(e => console.error("Playback error:", e))
+    } else {
+      audio.pause()
+    }
+  }, [playback.isPlaying, playback.stationIndex, radioStations])
 
   const location = useLocation()
   const navigate = useNavigate()
@@ -3176,5 +3193,6 @@ function AppInner({ isAdmin, onLogout }) {
     {modal?.type === 'input' && <InputModal title={modal.title} placeholder={modal.placeholder} defaultValue={modal.defaultVal} onConfirm={modal.onConfirm} onCancel={closeModal} />}
     {modal?.type === 'history' && <Modal onClose={closeModal}><HistoryModal mat={modal.mat} entries={modal.entries} /></Modal>}
     <SnakeCubeLoader sync={sync} logoRef={headerLogoRef} />
+    <audio ref={globalAudioRef} preload="none" />
   </>
 }
