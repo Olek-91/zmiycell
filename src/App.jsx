@@ -2611,9 +2611,7 @@ function AppInner({ isAdmin, onLogout }) {
             if (!gm) return []
             
             const a = assemblies.find(as => String(as.outputMatId) === String(mId))
-            const fits = a && (a.isUniversal || typeMaterials.some(tm => tm.typeId == calcTypeId && tm.matId == a.outputMatId))
-            
-            if (fits) {
+            if (a) {
               const inStock = calcIgnoreAsm ? 0 : (gm.stock || 0)
               const deficit = Math.max(0, q - inStock)
               if (deficit <= 0) return []
