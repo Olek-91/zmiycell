@@ -1563,9 +1563,9 @@ function AppInner({ isAdmin, onLogout }) {
                 }
               `}</style>
               <div style={{ fontSize: 50, marginBottom: 12 }}>🐍💨</div>
-              <div style={{ color: G.gn, fontWeight: 800, fontSize: 16 }}>МАТЕРІАЛИ З'ЇДЕНО!</div>
+              <div style={{ color: G.gn, fontWeight: 800, fontSize: 16, textTransform: 'lowercase' }}>матеріали з'їв ням-ням))</div>
               <div style={{ color: G.t2, fontSize: 13, marginTop: 6, lineHeight: 1.4 }}>
-                Списання успішне.<br />Введіть нові номери або змініть налаштування, щоб змійка виплюнула наступний список.
+                Списання успішне. <br />Змійка чекає на наступну порцію — введіть нові номери.
               </div>
             </div>
           ) : consumed.length === 0 ? <div style={{ color: G.t2, fontSize: 13 }}>Матеріали не налаштовано для цього типу</div>
