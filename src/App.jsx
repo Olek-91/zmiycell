@@ -656,6 +656,7 @@ function AppInner({ isAdmin, onLogout }) {
   const [prodQty, setProdQty] = useState(1)
   const [prodDate, setProdDate] = useState(todayStr())
   const [prodSerials, setProdSerials] = useState([])
+  const [snakeAte, setSnakeAte] = useState(false)
   const [stockSearch, setStockSearch] = useState('')
   const [repairSerial, setRepairSerial] = useState('')
   const [repairSearch, setRepairSearch] = useState('')
@@ -1024,6 +1025,7 @@ function AppInner({ isAdmin, onLogout }) {
           })
           setLog(prev => [entry, ...prev])
           setProdSerials([])
+          setSnakeAte(true)
           showToast(`✓ Списано ${prodQty} акум. (${serials.join(', ')})`)
           const lowMats = consumed.filter(c => {
             const m = globalMat(c.matId)
@@ -1528,30 +1530,45 @@ function AppInner({ isAdmin, onLogout }) {
     return wrap(<>
       <SubTabs tabs={[['writeoff', '🔋 СПИСАННЯ'], ['prep', '📦 ЗАГОТОВКА'], ['assembly', '⚙️ ЗБІРКА']]} active={prodTab} onChange={setProdTab} />
       {prodTab === 'writeoff' && <>
-        <TypeTabs types={batteryTypes} active={prodTypeId} onSelect={id => { setProdTypeId(id); setProdSerials([]) }} />
+        <TypeTabs types={batteryTypes} active={prodTypeId} onSelect={id => { setProdTypeId(id); setProdSerials([]); setSnakeAte(false) }} />
         <Card>
           <FormRow label="ПРАЦІВНИК">
-            <select value={prodWorker} onChange={e => setProdWorker(e.target.value)}>
+            <select value={prodWorker} onChange={e => { setProdWorker(e.target.value); setSnakeAte(false) }}>
               {workers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
             </select>
           </FormRow>
-          <FormRow label="ДАТА"><input value={prodDate} onChange={e => setProdDate(e.target.value)} /></FormRow>
+          <FormRow label="ДАТА"><input value={prodDate} onChange={e => { setProdDate(e.target.value); setSnakeAte(false) }} /></FormRow>
           <FormRow label="КІЛЬКІСТЬ АКУМУЛЯТОРІВ">
             <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              <QtyBtn onClick={() => { if (prodQty > 1) { setProdQty(q => q - 1); setProdSerials(s => s.slice(0, -1)) } }}>−</QtyBtn>
+              <QtyBtn onClick={() => { if (prodQty > 1) { setProdQty(q => q - 1); setProdSerials(s => s.slice(0, -1)); setSnakeAte(false) } }}>−</QtyBtn>
               <span style={{ fontSize: 28, fontWeight: 700, color: G.or, minWidth: 44, textAlign: 'center' }}>{prodQty}</span>
-              <QtyBtn onClick={() => { if (prodQty < 20) setProdQty(q => q + 1) }}>+</QtyBtn>
+              <QtyBtn onClick={() => { if (prodQty < 20) { setProdQty(q => q + 1); setSnakeAte(false) } }}>+</QtyBtn>
             </div>
           </FormRow>
           <FormRow label="СЕРІЙНІ НОМЕРИ">
             {serials.map((v, i) => <input key={i} placeholder={`#${i + 1} серійний номер`} value={v}
-              onChange={e => { const s = [...prodSerials]; while (s.length <= i) s.push(''); s[i] = e.target.value; setProdSerials(s) }}
+              onChange={e => { const s = [...prodSerials]; while (s.length <= i) s.push(''); s[i] = e.target.value; setProdSerials(s); setSnakeAte(false) }}
               style={{ marginBottom: 6 }} />)}
           </FormRow>
         </Card>
         {prodType && <Card>
           <CardTitle>⚡ БУДЕ СПИСАНО</CardTitle>
-          {consumed.length === 0 ? <div style={{ color: G.t2, fontSize: 13 }}>Матеріали не налаштовано для цього типу</div>
+          {snakeAte ? (
+            <div style={{ textAlign: 'center', padding: '24px 10px', animation: 'snakeEatenAnim 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) both' }}>
+              <style>{`
+                @keyframes snakeEatenAnim {
+                  0% { transform: scale(0.8) translateY(20px); opacity: 0; }
+                  50% { transform: scale(1.1) translateY(-5px); opacity: 1; }
+                  100% { transform: scale(1) translateY(0); opacity: 1; }
+                }
+              `}</style>
+              <div style={{ fontSize: 50, marginBottom: 12 }}>🐍💨</div>
+              <div style={{ color: G.gn, fontWeight: 800, fontSize: 16 }}>МАТЕРІАЛИ З'ЇДЕНО!</div>
+              <div style={{ color: G.t2, fontSize: 13, marginTop: 6, lineHeight: 1.4 }}>
+                Списання успішне.<br />Введіть нові номери або змініть налаштування, щоб змійка виплюнула наступний список.
+              </div>
+            </div>
+          ) : consumed.length === 0 ? <div style={{ color: G.t2, fontSize: 13 }}>Матеріали не налаштовано для цього типу</div>
             : consumed.map(c => {
               const ok = c.fromStock <= c.totalStock
               return <div key={c.matId + (c.isSubstitute ? '_sub' : '')} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: `1px solid ${G.b1}`, fontSize: 13, marginLeft: c.isSubstitute ? 12 : 0 }}>
@@ -1569,7 +1586,7 @@ function AppInner({ isAdmin, onLogout }) {
               </div>
             })}
         </Card>}
-        <SubmitBtn onClick={doWriteoff}>✓ СПИСАТИ МАТЕРІАЛИ</SubmitBtn>
+        {!snakeAte && <SubmitBtn onClick={doWriteoff}>✓ СПИСАТИ МАТЕРІАЛИ</SubmitBtn>}
         <div style={{ height: 16 }} />
       </>}
       {prodTab === 'prep' && <PrepTab
