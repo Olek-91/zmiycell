@@ -25,6 +25,7 @@ var SHEET = {
   PAYMENTS:  'Payments',
   ACTION_LOG:'ActionLogs',
   MAT_BACKUP:'MaterialsBackup',
+  RADIO:     'RadioStations',
 }
 
 // Telegram — заповніть свої дані
@@ -185,6 +186,8 @@ var ACTIONS = {
   getBackupDiff:          getBackupDiff,
   restoreFromBackup:      restoreFromBackup,
 
+  saveRadioStation:        saveRadioStation,
+  deleteRadioStation:      deleteRadioStation,
   sendTelegram:           sendTelegramAction,
 }
 
@@ -299,9 +302,17 @@ function initSheets() {
     []
   )
 
-  ensureSheet(ss, SHEET.MAT_BACKUP,
-    ['matId','name','unit','stock','snapshotDate'],
-    []
+  ensureSheet(ss, SHEET.RADIO,
+    ['id', 'name', 'url'],
+    [
+      ['r1', 'Radio Paradise (Rock)',   'https://stream.radioparadise.com/rock-128'],
+      ['r2', 'KEXP 90.3 FM (Seattle)',  'https://kexp-mp3-128.streamguys1.com/kexp128.mp3'],
+      ['r3', 'SomaFM (Metal Detector)', 'https://ice1.somafm.com/metal-128-mp3'],
+      ['r4', 'Wacken Radio (Metal)',    'https://wacken.stream.publicradio.de/wacken_live'],
+      ['r5', 'SomaFM (Indie Pop)',      'https://ice1.somafm.com/indiepop-128-mp3'],
+      ['r6', 'Radio Paradise (Main)',   'https://stream.radioparadise.com/mp3-128'],
+      ['r7', 'Radio ROKS (Україна)',    'https://online.radioroks.ua/RadioROKS_H']
+    ]
   )
 
   return { ok: true, message: 'Ініціалізацію завершено' }
@@ -528,6 +539,11 @@ function loadAll() {
         note: r.note || '',
       }
     }).reverse(),
+    
+    radioStations: rows(ss, SHEET.RADIO).map(function(r) {
+      return { id: r.id, name: r.name, url: r.url }
+    }),
+    version: 'RADIO_READY_1.1'
   }
 }
 
@@ -2019,3 +2035,42 @@ function logPrepEntry(entry) {
 }
 
 
+function deleteRowWhere(sheetName, predicate) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet()
+  var sh = ss.getSheetByName(sheetName)
+  if (!sh) return { ok: false, error: 'Sheet not found' }
+  var data = sh.getDataRange().getValues()
+  for (var i = data.length - 1; i >= 1; i--) {
+    if (predicate(data[i])) {
+      sh.deleteRow(i + 1)
+      return { ok: true }
+    }
+  }
+  return { ok: false, error: 'Row not found' }
+}
+
+function saveRadioStation(station) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet()
+  var sh = ss.getSheetByName(SHEET.RADIO)
+  if (!sh) return { ok: false, error: 'Sheet not found' }
+  
+  if (!station.id) {
+    station.id = 'r_' + Date.now()
+    sh.appendRow([station.id, station.name, station.url])
+  } else {
+    var data = sh.getDataRange().getValues()
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(station.id)) {
+        sh.getRange(i + 1, 1, 1, 3).setValues([[station.id, station.name, station.url]])
+        return { ok: true, id: station.id }
+      }
+    }
+  }
+  return { ok: true, id: station.id }
+}
+
+function deleteRadioStation(id) {
+  return deleteRowWhere(SHEET.RADIO, function(r) {
+    return String(r[0]) === String(id)
+  })
+}

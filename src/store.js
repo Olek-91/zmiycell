@@ -13,6 +13,7 @@ export const useStore = create((set, get) => ({
   tools: [],
   toolLog: [],
   repairLog: [],
+  radioStations: [],
   
   sync: 'loading',
   
@@ -32,6 +33,7 @@ export const useStore = create((set, get) => ({
         tools: resp.tools || [],
         toolLog: resp.toolLog || [],
         repairLog: resp.repairLog || [],
+        radioStations: resp.radioStations || [],
         sync: 'ok'
       })
     } catch (e) {
@@ -56,6 +58,7 @@ export const useStore = create((set, get) => ({
         tools: resp.tools || [],
         toolLog: resp.toolLog || [],
         repairLog: resp.repairLog || [],
+        radioStations: resp.radioStations || [],
         sync: 'ok'
       })
     } catch (e) {
@@ -74,5 +77,6 @@ export const useStore = create((set, get) => ({
   setTools: (v) => set(s => ({ tools: typeof v === 'function' ? v(s.tools) : v })),
   setToolLog: (v) => set(s => ({ toolLog: typeof v === 'function' ? v(s.toolLog) : v })),
   setRepairLog: (v) => set(s => ({ repairLog: typeof v === 'function' ? v(s.repairLog) : v })),
+  setRadioStations: (v) => set(s => ({ radioStations: typeof v === 'function' ? v(s.radioStations) : v })),
   setSync: (v) => set(s => ({ sync: typeof v === 'function' ? v(s.sync) : v })),
 }))

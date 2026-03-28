@@ -3,6 +3,7 @@ import { Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-r
 import { useSwipeable } from 'react-swipeable'
 import { gasCall } from './api.js'
 import { useStore } from './store.js'
+import AdFreeRockPlayer from './RockRadio.jsx'
 
 // ─── Кольори ─────────────────────────────────────────────
 const G = {
@@ -554,9 +555,9 @@ export default function App() {
 function AppInner({ isAdmin, onLogout }) {
   // ── З'єднання з Zustand ──────────────────────────────────────
   const {
-    materials, typeMaterials, assemblies, batteryTypes, workers, tools, log, repairLog, prepItems, payments, toolLog,
+    materials, typeMaterials, assemblies, batteryTypes, workers, tools, log, repairLog, prepItems, payments, toolLog, radioStations,
     sync, loadAll, refresh,
-    setMaterials, setTypeMaterials, setAssemblies, setBatteryTypes, setWorkers, setLog, setPrepItems, setPayments, setTools, setToolLog, setRepairLog, setSync
+    setMaterials, setTypeMaterials, setAssemblies, setBatteryTypes, setWorkers, setLog, setPrepItems, setPayments, setTools, setToolLog, setRepairLog, setRadioStations, setSync
   } = useStore()
 
   const location = useLocation()
@@ -586,6 +587,7 @@ function AppInner({ isAdmin, onLogout }) {
     ['actlog', '📜', 'ЛОГ'],
     ['backup', '💾', 'БЕКАП'],
     ['manual', '📖', 'МАНУАЛ'],
+    ['radio', '📻', 'РАДІО'],
   ]
   const USER_NAV = [
     ['prod', '⚙', 'ВИР.'],
@@ -594,6 +596,7 @@ function AppInner({ isAdmin, onLogout }) {
     ['stock', '📦', 'СКЛАД'],
     ['tools', '🛠', 'ІНСТР.'],
     ['manual', '📖', 'МАНУАЛ'],
+    ['radio', '📻', 'РАДІО'],
   ]
   const NAV = isAdmin ? ALL_NAV : USER_NAV
 
@@ -2951,6 +2954,9 @@ function AppInner({ isAdmin, onLogout }) {
     </>)
   }
 
+  // ── Радіо ──────────────────────────────────────────────────
+  const PageRadio = () => wrap(<AdFreeRockPlayer />)
+
   // ── Лог дій (адмін) ───────────────────────────────────────
   const loadActionLogs = useCallback(() => {
     setActionLogs(null)
@@ -3160,6 +3166,7 @@ function AppInner({ isAdmin, onLogout }) {
         <Route path="/actlog" element={PageActionLog()} />
         <Route path="/backup" element={PageBackup()} />
         <Route path="/manual" element={PageManual()} />
+        <Route path="/radio" element={PageRadio()} />
       </Routes>
 
     </div>
