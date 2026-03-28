@@ -66,7 +66,7 @@ const CardTitle = ({ children, color = G.or }) =>
   <div style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 17, fontWeight: 700, color, letterSpacing: .5, marginBottom: 10 }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
       {children}
-      <span style={{ fontSize: 10, color: G.t2, opacity: 0.5, fontWeight: 400 }}>v1.6-hybrid-calc</span>
+      <span style={{ fontSize: 10, color: G.t2, opacity: 0.5, fontWeight: 400 }}>v1.7-final-calc</span>
     </div>
   </div>
 const QtyBtn = ({ onClick, children }) =>
@@ -648,7 +648,6 @@ function AppInner({ isAdmin, onLogout }) {
   // PageShopping — калькулятор виробництва
   const [calcTypeId, setCalcTypeId] = useState('')
   const [calcQty, setCalcQty] = useState('10')
-  const [calcShowRawOnly, setCalcShowRawOnly] = useState(false)
 
 
   // ── UI стан ──────────────────────────────────────────────
@@ -2570,22 +2569,6 @@ function AppInner({ isAdmin, onLogout }) {
           </div>
         </div>
 
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: 12, 
-          marginBottom: 15, 
-          padding: '12px 16px', 
-          background: calcShowRawOnly ? 'rgba(6,182,212,0.1)' : 'rgba(255,255,255,0.03)', 
-          borderRadius: 12, 
-          cursor: 'pointer',
-          border: `1px solid ${calcShowRawOnly ? G.cy : 'transparent'}`,
-          transition: '.2s'
-        }} onClick={() => setCalcShowRawOnly(!calcShowRawOnly)}>
-          <input type="checkbox" checked={calcShowRawOnly} readOnly style={{ width: 18, height: 18, cursor: 'pointer', accentColor: G.cy }} />
-          <span style={{ fontSize: 13, color: calcShowRawOnly ? G.cy : G.t1, fontWeight: 800 }}>РОЗКЛАСТИ ДО СИРИХ МАТЕРІАЛІВ</span>
-        </div>
-
         {(() => {
           const qty = parseFloat(calcQty) || 0
           if (!calcTypeId || !qty) return (
@@ -2617,7 +2600,7 @@ function AppInner({ isAdmin, onLogout }) {
             return [{ matId: mId, q: deficit }]
           }
 
-          const flattened = tms.flatMap(tm => getDeficitRecursive(tm.matId, tm.perBattery * qty, calcShowRawOnly))
+          const flattened = tms.flatMap(tm => getDeficitRecursive(tm.matId, tm.perBattery * qty, true))
           const merged = []
           flattened.forEach(f => {
             const ex = merged.find(m => m.matId == f.matId)
@@ -2635,7 +2618,7 @@ function AppInner({ isAdmin, onLogout }) {
 
           return <>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 4, fontSize: 11, color: G.t2, fontFamily: "'Barlow Condensed',sans-serif", fontWeight: 700, letterSpacing: .5, padding: '0 4px 6px', borderBottom: `1px solid ${G.b1}` }}>
-              <span>{calcShowRawOnly ? 'СИРІ МАТЕРІАЛИ (ДЛЯ ЗАКУПІВЛІ)' : 'МАТЕРІАЛИ ТА ЗБІРКИ (ДЛЯ ПРАЦІВНИКА)'}</span>
+              <span>СИРОВИНА ТА МАТЕРІАЛИ (ДЛЯ ЗАКУПІВЛІ)</span>
               <span style={{ textAlign: 'right' }}>ДЕФІЦИТ</span>
             </div>
             {rows.map((r, i) => (
