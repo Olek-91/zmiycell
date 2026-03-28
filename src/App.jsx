@@ -66,7 +66,7 @@ const CardTitle = ({ children, color = G.or }) =>
   <div style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 17, fontWeight: 700, color, letterSpacing: .5, marginBottom: 10 }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
       {children}
-      <span style={{ fontSize: 10, color: G.t2, opacity: 0.5, fontWeight: 400 }}>v1.5-calc-fix</span>
+      <span style={{ fontSize: 10, color: G.t2, opacity: 0.5, fontWeight: 400 }}>v1.6-hybrid-calc</span>
     </div>
   </div>
 const QtyBtn = ({ onClick, children }) =>
