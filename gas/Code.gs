@@ -279,9 +279,10 @@ function initSheets() {
   )
 
   ensureSheet(ss, SHEET.REPAIR,
-    ['id','datetime','date','serial','typeName','typeId','originalWorker','repairWorker','note','materialsJson','status'],
+    ['id','datetime','date','serial','typeName','typeId','originalWorker','repairWorker','note','materialsJson','status','photoUrl'],
     []
   )
+  ensureColumn(ss.getSheetByName(SHEET.REPAIR), 'photoUrl')
 
   ensureSheet(ss, SHEET.PREP,
     ['id','workerId','workerName','typeId','matId','matName','unit','qty','returnedQty','date','datetime','status','scope'],
@@ -483,6 +484,7 @@ function loadAll() {
         note:           r.note || '',
         materials:      json(r.materialsJson, []),
         status:         r.status || 'completed',
+        photoUrl:       r.photoUrl || '',
       }
     }).reverse(),
 
@@ -1062,6 +1064,7 @@ function addRepair(entry) {
       entry.note || '',
       JSON.stringify(entry.materials || []),
       entry.status || 'completed',
+      entry.photoUrl || '',
     ])
 
     ss.getSheetByName(SHEET.LOG).appendRow([
@@ -1728,7 +1731,7 @@ function issueConsumable(workerId, workerName, matId, matName, qty, unit, date, 
   })
 }
 
-function updateRepairStatus(repairId, status, dateCompleted, workerName, materialsJson, noteAppend) {
+function updateRepairStatus(repairId, status, dateCompleted, workerName, materialsJson, noteAppend, photoUrl) {
   return withLock(function() {
     var ss = SpreadsheetApp.getActiveSpreadsheet()
     var repSh = ss.getSheetByName(SHEET.REPAIR)
@@ -1744,6 +1747,11 @@ function updateRepairStatus(repairId, status, dateCompleted, workerName, materia
     if (foundIndex < 0) return { ok: false, error: 'Repair not found' }
     
     var row = data[foundIndex]
+    
+    // Update photo if provided
+    if (photoUrl) {
+      repSh.getRange(foundIndex + 1, 12).setValue(photoUrl)
+    }
     
     // Deduct materials if completing
     var consumed = []

@@ -649,14 +649,16 @@ function AppInner({ isAdmin, onLogout }) {
   const [repWorker, setRepWorker] = useState('')
   const [repDate, setRepDate] = useState(todayStr())
   const [repNote, setRepNote] = useState('')
+  const [repPhotoUrl, setRepPhotoUrl] = useState('')
   const [matChecks, setMatChecks] = useState({})
   const [manTypeId, setManTypeId] = useState('')
   const [manWorkerId, setManWorkerId] = useState('')
   const [manDate, setManDate] = useState(todayStr())
   const [completingId, setCompletingId] = useState(null)
   const [compWorker, setCompWorker] = useState('')
-  const [compDate, setCompDate] = useState(todayStr())
+  const [compDate, setCompDate] = useState('')
   const [compNote, setCompNote] = useState('')
+  const [compPhotoUrl, setCompPhotoUrl] = useState('')
   const [compChecks, setCompChecks] = useState({})
   const [compQtys, setCompQtys] = useState({})
   // PageWorkers
@@ -2068,7 +2070,7 @@ function AppInner({ isAdmin, onLogout }) {
 
     const handleRegisterArrival = () => {
       if (!repType) return
-      const entry = { id: uid(), datetime: nowStr(), date: repDate, serial, typeName: repType.name, typeId: repType.id, originalWorker: found.workerName, repairWorker: '', note: repNote, materials: [], status: 'pending' }
+      const entry = { id: uid(), datetime: nowStr(), date: repDate, serial, typeName: repType.name, typeId: repType.id, originalWorker: found.workerName, repairWorker: '', note: repNote, materials: [], status: 'pending', photoUrl: repPhotoUrl }
       doSubmitRepair(entry)
     }
 
@@ -2085,6 +2087,7 @@ function AppInner({ isAdmin, onLogout }) {
       setCompWorker(r.repairWorker || repWorker || workers[0]?.id)
       setCompDate(todayStr())
       setCompNote('')
+      setCompPhotoUrl(r.photoUrl || '')
       const initialChecks = {}
       const initialQtys = {}
       typeMaterials.filter(tm => tm.typeId === r.typeId).forEach(tm => {
@@ -2117,8 +2120,7 @@ function AppInner({ isAdmin, onLogout }) {
       openConfirm('Завершити ремонт?', 'Будуть списані матеріали (з рук або зі складу) та оновлено статус.', async () => {
         closeModal()
         try {
-          // We need accurate mats for the log/backend
-          const res = await api('updateRepairStatus', [r.id, 'completed', compDate, cw?.name || '', compressConsumed(consumed), compNote])
+          const res = await api('updateRepairStatus', [r.id, 'completed', compDate, cw?.name || '', compressConsumed(consumed), compNote, compPhotoUrl])
           if (!res.ok) throw new Error(res.error)
 
           // 1. Update Global Stock
@@ -2156,7 +2158,7 @@ function AppInner({ isAdmin, onLogout }) {
             const newNote = curNote + (curNote ? ' | ' : '') + fullAppend
             
             // For the repair log entry, we store what was consumed
-            return { ...rx, status: 'completed', note: newNote, repairWorker: cw?.name || '', materials: consumed }
+            return { ...rx, status: 'completed', note: newNote, repairWorker: cw?.name || '', materials: consumed, photoUrl: compPhotoUrl }
           }))
 
           // 4. Add to General Log if backend returned transformed consumed
@@ -2207,6 +2209,7 @@ function AppInner({ isAdmin, onLogout }) {
           <div style={{ color: G.gn, fontSize: 12, marginBottom: 12 }}>✓ Знайдено: {found.typeName} · <span style={{ color: getWorkerColor(found.workerName), fontWeight: 600 }}>{found.workerName}</span> · {found.date}</div>
           <FormRow label="ДАТА ПРИЙОМКИ"><input value={repDate} onChange={e => setRepDate(e.target.value)} /></FormRow>
           <FormRow label="ОПИС НЕСПРАВНОСТІ / НОТАТКА"><input value={repNote} onChange={e => setRepNote(e.target.value)} placeholder="напр. не заряджається" /></FormRow>
+          <FormRow label="ФОТО (URL-посилання)"><input value={repPhotoUrl} onChange={e => setRepPhotoUrl(e.target.value)} placeholder="https://example.com/photo.jpg" /></FormRow>
           <SubmitBtn onClick={handleRegisterArrival} color='#ea580c'>🔧 ПРИЙНЯТИ В РЕМОНТ</SubmitBtn>
         </Card>}
 
@@ -2242,6 +2245,11 @@ function AppInner({ isAdmin, onLogout }) {
             <span style={{ fontSize: 11, color: G.t2 }}>{r.datetime}</span>
           </div>
           {r.note && <div style={{ fontSize: 12, color: '#fb923c', marginBottom: 5 }}>📝 {r.note}</div>}
+          {r.photoUrl && (
+            <div style={{ marginBottom: 10, borderRadius: 8, overflow: 'hidden', border: `1px solid ${G.b1}` }}>
+              <img src={r.photoUrl} alt="Repair" style={{ width: '100%', maxHeight: 300, objectFit: 'cover', display: 'block', cursor: 'pointer' }} onClick={() => window.open(r.photoUrl, '_blank')} />
+            </div>
+          )}
           {r.repairWorker && <div style={{ fontSize: 12, color: G.t2, marginBottom: 8 }}>Ремонтував: <span style={{ color: getWorkerColor(r.repairWorker), fontWeight: 600 }}>{r.repairWorker}</span></div>}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: r.status === 'completed' ? 8 : 0 }}>
             {(r.materials || []).filter(m => m.selected && m.qty > 0).map((m, i) =>
@@ -2334,6 +2342,7 @@ function AppInner({ isAdmin, onLogout }) {
               })}
             </FormRow>
             <FormRow label="ДОДАТИ НОТАТКУ (необов'язково)"><input value={compNote} onChange={e => setCompNote(e.target.value)} placeholder="напр. замінено BMS" /></FormRow>
+            <FormRow label="ФОТО ЗАВЕРШЕННЯ (URL)"><input value={compPhotoUrl} onChange={e => setCompPhotoUrl(e.target.value)} placeholder="https://example.com/result.jpg" /></FormRow>
             <div style={{ display: 'flex', gap: 6 }}>
               <button onClick={() => confirmComplete(r)} style={{ flex: 1, padding: '8px', background: '#166534', color: G.gn, border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>✓ ЗАВЕРШИТИ РЕМОНТ</button>
               <button onClick={() => setCompletingId(null)} style={{ padding: '8px 12px', background: G.b1, color: G.t2, border: `1px solid ${G.b2}`, borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>Скасувати</button>
