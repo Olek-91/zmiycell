@@ -2096,11 +2096,11 @@ function AppInner({ isAdmin, onLogout }) {
     const [expandedMats, setExpandedMats] = useState({})
     const serial = repairSerial
     const found = serial ? log.find(l => l.serials?.includes(serial)) : null
-    const repType = found ? batteryTypes.find(t => t.id === found.typeId) : null
+    const repType = found ? batteryTypes.find(t => t.id == found.typeId) : null
     const doSearch = () => {
       const s = repairSearch.trim()
       if (s) {
-        const pending = repairLog.find(r => r.serial === s && r.status !== 'completed')
+        const pending = repairLog.find(r => r.serial == s && r.status !== 'completed')
         if (pending) {
           showToast(`⚠ Акумулятор ${s} вже в очікуванні ремонту!`, 'err')
           return // block proceeding
@@ -2111,28 +2111,61 @@ function AppInner({ isAdmin, onLogout }) {
 
 
     const handleRegisterArrival = () => {
-      if (!repType) return
-      const entry = { id: uid(), datetime: nowStr(), date: repDate, serial, typeName: repType.name, typeId: repType.id, originalWorker: found.workerName, repairWorker: '', note: repNote, materials: [], status: 'pending', photoUrl: repPhotoUrl }
-      doSubmitRepair(entry)
+      if (!found) return
+      // Use found.typeId if repType is not found due to strict matching etc., 
+      // but we fixed it to == above, so repType should be ok.
+      const entry = { id: uid(), datetime: nowStr(), date: repDate, serial, typeName: found.typeName, typeId: found.typeId, originalWorker: found.workerName, repairWorker: '', note: repNote, materials: [], status: 'pending', photoUrl: repPhotoUrl }
+      
+      openConfirm('ПРИЙНЯТИ В РЕМОНТ?', 
+        <div style={{ fontSize: 14 }}>
+          Підтвердити прийомку акумулятора <b style={{ color: G.cy }}>{serial}</b> на ремонт?
+        </div>,
+        async () => {
+          closeModal()
+          try {
+            await api('addRepair', [entry])
+            setRepairLog(prev => [entry, ...prev])
+            showToast('✓ Прийнято в ремонт: ' + serial)
+            setRepairSearch('')
+            setRepairSerial('')
+          } catch (e) {
+            showToast('Помилка прийому: ' + e.message, 'err')
+          }
+        }
+      )
     }
 
     const handleManualRegister = () => {
       const t = batteryTypes.find(t => t.id == manTypeId)
       const w = workers.find(w => w.id == manWorkerId)
       const entry = { id: uid(), datetime: nowStr(), date: manDate, typeId: manTypeId, typeName: t?.name || '', workerName: w?.name || '', count: 1, serials: [serial], consumed: [], kind: 'production', repairNote: '' }
-      setLog(prev => [entry, ...prev])
-      showToast('✓ Зареєстровано ' + serial)
+      
+      openConfirm('ЗАРЕЄСТРУВАТИ ВРУЧНУ?', 
+        <div style={{ fontSize: 13 }}>
+          Зареєструвати акумулятор <b style={{ color: G.yw }}>{serial}</b> як виготовлений? (Додасть запис у журнал виробництва)
+        </div>,
+        async () => {
+          closeModal()
+          try {
+            await api('addProductionEntry', [entry]) // Added generic API call for production
+            setLog(prev => [entry, ...prev])
+            showToast('✓ Зареєстровано ' + serial)
+          } catch (e) {
+            showToast('Помилка реєстрації: ' + e.message, 'err')
+          }
+        }
+      )
     }
 
     const startCompleting = (r) => {
       setCompletingId(r.id)
-      setCompWorker(r.repairWorker || repWorker || workers[0]?.id)
+      setCompWorker(r.repairWorker || repWorker || (workers.length > 0 ? workers[0].id : ''))
       setCompDate(todayStr())
       setCompNote('')
       setCompPhotoUrl(r.photoUrl || '')
       const initialChecks = {}
       const initialQtys = {}
-      typeMaterials.filter(tm => tm.typeId === r.typeId).forEach(tm => {
+      typeMaterials.filter(tm => tm.typeId == r.typeId).forEach(tm => {
         initialChecks[tm.matId] = false
         initialQtys[tm.matId] = tm.perBattery
       })
