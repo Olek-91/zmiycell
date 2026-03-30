@@ -2096,11 +2096,11 @@ function AppInner({ isAdmin, onLogout }) {
     const [expandedMats, setExpandedMats] = useState({})
     const serial = repairSerial
     const found = serial ? log.find(l => l.serials?.includes(serial)) : null
-    const repType = found ? batteryTypes.find(t => t.id == found.typeId) : null
+    const repType = found ? batteryTypes.find(t => String(t.id) === String(found.typeId)) : null
     const doSearch = () => {
       const s = repairSearch.trim()
       if (s) {
-        const pending = repairLog.find(r => r.serial == s && r.status !== 'completed')
+        const pending = repairLog.find(r => String(r.serial) === String(s) && r.status !== 'completed')
         if (pending) {
           showToast(`⚠ Акумулятор ${s} вже в очікуванні ремонту!`, 'err')
           return // block proceeding
@@ -2136,8 +2136,8 @@ function AppInner({ isAdmin, onLogout }) {
     }
 
     const handleManualRegister = () => {
-      const t = batteryTypes.find(t => t.id == manTypeId)
-      const w = workers.find(w => w.id == manWorkerId)
+      const t = batteryTypes.find(t => String(t.id) === String(manTypeId))
+      const w = workers.find(w => String(w.id) === String(manWorkerId))
       const entry = { id: uid(), datetime: nowStr(), date: manDate, typeId: manTypeId, typeName: t?.name || '', workerName: w?.name || '', count: 1, serials: [serial], consumed: [], kind: 'production', repairNote: '' }
       
       openConfirm('ЗАРЕЄСТРУВАТИ ВРУЧНУ?', 
@@ -2165,7 +2165,7 @@ function AppInner({ isAdmin, onLogout }) {
       setCompPhotoUrl(r.photoUrl || '')
       const initialChecks = {}
       const initialQtys = {}
-      typeMaterials.filter(tm => tm.typeId == r.typeId).forEach(tm => {
+      typeMaterials.filter(tm => String(tm.typeId) === String(r.typeId)).forEach(tm => {
         initialChecks[tm.matId] = false
         initialQtys[tm.matId] = tm.perBattery
       })
