@@ -16,6 +16,7 @@ const G = {
 // getWorkerColor переміщено в AppInner, щоб мати доступ до workers.color
 
 const GLOBAL_CSS = `
+* { box-sizing: border-box; }
 @keyframes slideUp{from{transform:translateY(10px);opacity:0}to{transform:translateY(0);opacity:1}}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
@@ -23,9 +24,9 @@ input,select,textarea{background:#0f172a;border:1px solid #374151;color:#e5e7eb;
 textarea{resize:vertical;min-height:80px}
 input:focus,select:focus,textarea:focus{border-color:#f97316}
 select option{background:#1f2937}
-html,body{height:100%;height:100dvh;margin:0;background:#0a0f1a url('/logo.jpg') center center / cover no-repeat fixed;}
-#root{height:100%;height:100dvh;display:flex;flex-direction:column;background:rgba(10,15,26,0.88);position:relative;overflow:hidden;}
-.page-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;transition:transform 0.15s ease-out;}
+html,body{height:100%;height:100dvh;margin:0;background:#0a0f1a url('/logo.jpg') center center / cover no-repeat fixed; overflow-x: hidden; width: 100%;}
+#root{height:100%;height:100dvh;width: 100%; display:flex;flex-direction:column;background:rgba(10,15,26,0.88);position:relative;overflow:hidden;}
+.page-scroll{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;transition:transform 0.15s ease-out; width: 100%;}
 .tab-nav::-webkit-scrollbar{display:none;}
 .tab-nav{scrollbar-width:none;}
 @media (min-width: 850px) { .tab-nav { justify-content: center; max-width: 100% !important; } }
@@ -78,8 +79,8 @@ const TypeTabs = ({ types, active, onSelect }) =>
     {types.map(t => <button key={t.id} onClick={() => { haptic(60); onSelect(t.id); }} style={{ flex: '1 1 auto', minWidth: 80, padding: '10px 6px', borderRadius: 10, fontFamily: "'Barlow Condensed',sans-serif", fontSize: 13, fontWeight: 700, letterSpacing: .5, cursor: 'pointer', border: `1px solid ${t.id === active ? (t.color || G.or) : G.b2}`, background: t.id === active ? '#1c1107' : G.card, color: t.id === active ? (t.color || G.or) : G.t2, transition: '.15s' }}>{t.name}</button>)}
   </div>
 const SubTabs = ({ tabs, active, onChange }) =>
-  <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-    {tabs.map(([k, label]) => <button key={k} onClick={() => onChange(k)} style={{ flex: 1, padding: 9, borderRadius: 10, border: `1px solid ${k === active ? G.or : G.b2}`, background: k === active ? '#1c1917' : G.card, color: k === active ? G.or : G.t2, fontFamily: "'Barlow Condensed',sans-serif", fontSize: 13, fontWeight: 700, letterSpacing: .5, cursor: 'pointer' }}>{label}</button>)}
+  <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+    {tabs.map(([k, label]) => <button key={k} onClick={() => onChange(k)} style={{ flex: '1 1 auto', minWidth: 80, padding: 9, borderRadius: 10, border: `1px solid ${k === active ? G.or : G.b2}`, background: k === active ? '#1c1917' : G.card, color: k === active ? G.or : G.t2, fontFamily: "'Barlow Condensed',sans-serif", fontSize: 13, fontWeight: 700, letterSpacing: .5, cursor: 'pointer' }}>{label}</button>)}
   </div>
 const Chip = ({ bg, color, bd, children, style = {} }) =>
   <span style={{ background: bg, color, border: `1px solid ${bd}`, padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 700, fontFamily: "'Barlow Condensed',sans-serif", letterSpacing: .5, flexShrink: 0, ...style }}>{children}</span>
@@ -1442,7 +1443,7 @@ function AppInner({ isAdmin, onLogout }) {
   //  СТОРІНКИ
   // ════════════════════════════════════════════════════════
   const wrap = (children) =>
-    <div style={{ padding: '12px 12px 40px', maxWidth: 700, margin: '0 auto' }}>{children}</div>
+    <div style={{ padding: '12px 12px 40px', maxWidth: 700, margin: '0 auto', width: '100%' }}>{children}</div>
 
 
   // ── Таб Збірка (всередині ВИРОБНИЦТВО) ───────────────────
@@ -3228,7 +3229,7 @@ function AppInner({ isAdmin, onLogout }) {
           <BatteryIcon />
         </div>
       </div>
-      <div className="tab-nav" style={{ display: 'flex', overflowX: 'auto', maxWidth: 700, margin: '0 auto', borderTop: `1px solid rgba(255,255,255,0.05)` }}>
+      <div className="tab-nav" style={{ display: 'flex', overflowX: 'auto', maxWidth: 700, width: '100%', margin: '0 auto', borderTop: `1px solid rgba(255,255,255,0.05)` }}>
         {NAV.map(([k, icon, label]) =>
           <button key={k} onClick={() => setPage(k)} style={{ flex: '0 0 auto', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', borderBottom: `2px solid ${path === k ? G.or : 'transparent'}`, cursor: 'pointer', color: path === k ? G.or : G.t2, transition: '.15s', whiteSpace: 'nowrap', fontFamily: "'Barlow Condensed',sans-serif", fontSize: 13, fontWeight: 700, letterSpacing: .5 }}>
             <span style={{ fontSize: 16 }}>{icon}</span> {label}
