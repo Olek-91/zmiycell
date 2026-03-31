@@ -21,6 +21,7 @@ const GLOBAL_CSS = `
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 input,select,textarea{background:#0f172a;border:1px solid #374151;color:#e5e7eb;border-radius:8px;padding:8px 12px;font-family:'Fira Code',monospace;font-size:14px;outline:none;width:100%;transition:border-color .15s}
+input[type="radio"], input[type="checkbox"]{width:auto;padding:0;background:transparent;border:none}
 textarea{resize:vertical;min-height:80px}
 input:focus,select:focus,textarea:focus{border-color:#f97316}
 select option{background:#1f2937}
