@@ -24,8 +24,11 @@ export default function Dashboard() {
   const serials = Array.from({ length: qty }, (_, i) => `SN-${activeType.name.split(' ')[0]}-${parseInt(startSN) + i}`);
 
   const handleSave = async () => {
+    console.log('--- HANDLE SAVE CALLED ---');
+    console.log('Type:', selType, 'Qty:', qty, 'Worker:', worker);
     setShowGate(false);
     await store.addProduction(selType, qty, worker, serials);
+    console.log('--- ADD PRODUCTION FINISHED ---');
   };
 
   return (
@@ -67,7 +70,7 @@ export default function Dashboard() {
                     key={t.id}
                     onClick={() => setSelType(t.id)}
                     className={cn(
-                      "flex items-center justify-between px-4 py-3 rounded-xl border text-xs font-bold transition-all duration-300",
+                      "flex items-center justify-between px-4 py-3 rounded-xl border text-xs font-bold transition-all duration-300 active:scale-[0.98] active:bg-toxic/20",
                       selType === t.id 
                         ? 'bg-toxic/5 border-toxic text-toxic' 
                         : 'bg-dim border-edge text-foreground/40 hover:border-foreground/20 hover:text-foreground'
@@ -104,10 +107,25 @@ export default function Dashboard() {
 
             <button 
               onClick={() => setShowGate(true)}
-              className="w-full py-4 bg-toxic text-black font-black text-xs tracking-widest rounded-xl transition-all duration-300 hover:shadow-[0_0_30px_rgba(57,255,20,0.4)] active:scale-95 uppercase flex items-center justify-center gap-2 mt-4"
+              className="w-full py-4 bg-toxic text-black font-black text-xs tracking-widest rounded-xl transition-all duration-300 hover:shadow-[0_0_30px_rgba(57,255,20,0.4)] active:scale-95 active:brightness-90 uppercase flex items-center justify-center gap-2 mt-4"
             >
               <Zap size={14} fill="currentColor" /> Initiate Production
             </button>
+          </div>
+
+          {/* Quick Stock Monitor - Added for Verifying Deductions */}
+          <div className="p-6 bg-card border border-edge rounded-2xl space-y-4">
+            <h2 className="flex items-center gap-2 text-[10px] font-black tracking-widest text-foreground/30 uppercase">
+              Current Stock Status
+            </h2>
+            <div className="grid grid-cols-2 gap-3">
+              {store.materials.slice(0, 4).map(m => (
+                <div key={m.id} className="p-3 bg-dim border border-edge rounded-xl">
+                  <div className="text-[8px] font-bold text-foreground/30 uppercase mb-1">{m.name}</div>
+                  <div className="text-sm font-black text-toxic">{m.stock} <span className="text-[8px] text-foreground/20">{m.unit}</span></div>
+                </div>
+              ))}
+            </div>
           </div>
         </section>
 
@@ -150,7 +168,7 @@ export default function Dashboard() {
 
       {/* Safety Gate Modal */}
       {showGate && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md p-6">
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/95 p-6">
           <div className="w-full max-w-md bg-card border border-scrap/30 p-8 rounded-3xl shadow-[0_0_100px_rgba(255,49,49,0.15)] animate-in zoom-in-95 duration-200">
             <div className="flex flex-col items-center text-center gap-4">
               <div className="p-4 bg-scrap/10 rounded-full text-scrap animate-pulse">

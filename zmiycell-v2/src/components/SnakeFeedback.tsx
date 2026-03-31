@@ -78,7 +78,7 @@ export function SnakeFeedback({ active, onComplete }: SnakeFeedbackProps) {
   if (!show) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm pointer-events-none">
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/95 pointer-events-none">
       <div className="text-toxic font-black text-4xl mb-8 animate-bounce tracking-tighter">
         DATABASE UPDATED
       </div>

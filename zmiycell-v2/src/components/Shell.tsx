@@ -7,8 +7,10 @@ import { usePathname } from 'next/navigation';
 
 export function ShiftBattery() {
   const [percent, setPercent] = useState(0);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     const update = () => {
       const now = new Date();
       const start = new Date();
@@ -17,17 +19,19 @@ export function ShiftBattery() {
       end.setHours(17, 0, 0);
 
       if (now < start) setPercent(0);
-      else if (now > end) setPercent(100);
+      else if (now >= end) setPercent(100);
       else {
         const total = end.getTime() - start.getTime();
         const elapsed = now.getTime() - start.getTime();
-        setPercent(Math.round((elapsed / total) * 100));
+        setPercent(Math.min(99, Math.round((elapsed / total) * 100)));
       }
     };
     update();
     const timer = setInterval(update, 60000);
     return () => clearInterval(timer);
   }, []);
+
+  if (!mounted) return <div className="w-16 h-4 bg-dim rounded-full animate-pulse" />;
 
   return (
     <div className="flex items-center gap-2 px-2 md:px-3 py-1 bg-dim border border-edge rounded-full">

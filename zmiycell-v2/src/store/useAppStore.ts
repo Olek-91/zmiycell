@@ -27,11 +27,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   setSnakeActive: (active) => set({ snakeActive: active }),
 
-  updateStock: (matId, amount) => set((state) => ({
-    materials: state.materials.map(m => 
-      m.id === matId ? { ...m, stock: m.stock + amount } : m
-    )
-  })),
+  updateStock: (matId, amount) => {
+    console.log(`[STOCK] Updating ${matId} by ${amount}`);
+    set((state) => ({
+      materials: state.materials.map(m => 
+        m.id === matId ? { ...m, stock: m.stock + amount } : m
+      )
+    }));
+  },
 
   addProduction: async (typeId, qty, worker, serials) => {
     set({ status: 'saving' });
