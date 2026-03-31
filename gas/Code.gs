@@ -29,8 +29,8 @@ var SHEET = {
 }
 
 // Telegram — заповніть свої дані
-var TG_TOKEN   = '8697742454:AAFOwspQgr22QE53UU8piGG_y1k4uy87LLE'   // @BotFather
-var TG_CHAT_ID = '-5239255917' // @userinfobot або @getidsbot
+var TG_TOKEN   = 'ВАШ_ТОКЕН_ТУТ'   // @BotFather
+var TG_CHAT_ID = 'ВАШ_CHAT_ID_ТУТ' // @userinfobot або @getidsbot
 
 // ── Telegram відправка ────────────────────────────────────────
 function tgSend(text) {
