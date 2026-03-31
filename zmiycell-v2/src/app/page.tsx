@@ -166,6 +166,14 @@ export default function Dashboard() {
         </section>
       </div>
 
+      {/* Quick Mobile Debugger */}
+      <div className="p-4 bg-black border border-edge rounded-xl mt-8">
+        <h3 className="text-[8px] font-bold text-foreground/30 uppercase mb-2">System Logs (Mobile Debug)</h3>
+        <div id="mobile-logs" className="text-[10px] font-mono text-toxic max-h-32 overflow-y-auto space-y-1">
+          <div>&gt; Waiting for hydration...</div>
+        </div>
+      </div>
+
       {/* Safety Gate Modal */}
       {showGate && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/95 p-6">

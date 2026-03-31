@@ -9,6 +9,8 @@ const jetbrainsMono = JetBrains_Mono({
   variable: "--font-geist-mono", // Using this existing variable name that was set in CSS previously
 });
 
+import { ClientDate } from "@/components/ClientDate";
+
 export const metadata: Metadata = {
   title: "zmiyCell OS v1.0",
   description: "Industrial Production & Warehouse Manager",
@@ -20,8 +22,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full antialiased dark">
-      <body className={`h-full flex flex-col md:flex-row bg-background text-foreground font-mono selection:bg-toxic selection:text-black ${jetbrainsMono.variable}`}>
+    <html lang="en" className="h-full antialiased dark" suppressHydrationWarning={true}>
+      <body suppressHydrationWarning={true} className={`h-full flex flex-col md:flex-row bg-background text-foreground font-mono selection:bg-toxic selection:text-black ${jetbrainsMono.variable}`}>
         
         {/* Sidebar - Desktop Only */}
         <aside className="hidden md:flex w-64 flex-shrink-0 border-r border-edge flex-col bg-card z-20">
@@ -39,28 +41,27 @@ export default function RootLayout({
           </div>
         </aside>
 
-        {/* Header */}
-        <div className="fixed top-0 left-0 w-full h-16 border-b border-edge flex items-center justify-between px-6 md:px-8 bg-card z-[9999]">
-          <div className="flex items-center gap-3 md:gap-4">
-            <MobileMenu />
-            <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-4 text-[9px] md:text-xs font-bold text-foreground/40">
-              <span className="text-toxic hidden xs:inline">ONLINE</span>
-              <span className="hidden md:inline">•</span>
-              <span className="uppercase">{new Date().toLocaleDateString('uk-UA')}</span>
+        <div className="flex-1 flex flex-col min-w-0 relative h-full">
+          {/* Header */}
+          <div className="sticky top-0 left-0 w-full h-16 border-b border-edge flex items-center justify-between px-4 md:px-8 bg-card z-50">
+            <div className="flex items-center gap-3 md:gap-4">
+              <MobileMenu />
+              <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-4 text-[9px] md:text-xs font-bold text-foreground/40">
+                <span className="text-toxic hidden xs:inline">ONLINE</span>
+                <span className="hidden md:inline">•</span>
+                <ClientDate />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 md:gap-4">
+              <RockRadio />
+              <div className="hidden xs:block w-px h-4 bg-edge" />
+              <ShiftBattery />
             </div>
           </div>
 
-          <div className="flex items-center gap-2 md:gap-4">
-            <RockRadio />
-            <div className="hidden xs:block w-px h-4 bg-edge" />
-            <ShiftBattery />
-          </div>
-        </div>
-
-        {/* Main Area */}
-        <div className="flex-1 flex flex-col min-w-0 relative h-full overflow-hidden">
           {/* Content */}
-          <main className="flex-1 overflow-y-auto p-4 md:p-8 relative mt-16">
+          <main className="flex-1 overflow-y-auto p-4 md:p-8 relative">
             {children}
           </main>
         </div>

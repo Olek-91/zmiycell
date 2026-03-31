@@ -42,7 +42,7 @@ export function ShiftBattery() {
         />
       </div>
       <span className="text-[9px] md:text-[10px] font-bold text-toxic whitespace-nowrap">
-        {percent}% <span className="hidden xs:inline">SHIFT</span>
+        {percent}% <span className="hidden sm:inline">SHIFT</span>
       </span>
     </div>
   );
