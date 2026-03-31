@@ -1349,10 +1349,26 @@ function AppInner({ isAdmin, onLogout }) {
             return next
           })
 
-          // Додаємо вироблені на склад, якщо вибрано Склад
+          // Додаємо виготовлене на склад, якщо вибрано Склад
           if (asmDestination === 'stock') {
             updateGlobalStock(asm.outputMatId, outputAmt)
           }
+
+          // Додаємо локально в лог, щоб воно відразу з'явилося в Журналі без перезавантаження сторінки
+          const asmLogEntry = {
+            id: 'asmL_' + asm.id + '_' + Date.now(),
+            datetime: nowStr(),
+            date: asmDate,
+            typeId: '',
+            typeName: asm.name + (asmDestination !== 'stock' ? ' (як заготовка)' : ''),
+            workerName: worker.name,
+            count: asmQty,
+            serials: [],
+            consumed,
+            kind: 'assembly',
+            repairNote: ''
+          }
+          setLog(prev => [asmLogEntry, ...prev])
 
           showToast(`✓ Виготовлено: ${outputAmt} ${asm.unit} → ${asm.name}`)
         } catch { }
