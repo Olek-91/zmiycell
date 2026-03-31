@@ -1,95 +1,60 @@
-import { create } from 'zustand'
-import { gasCall } from '../api/client'
-import type { GlobalDataResponse, Material, Worker, BatteryType, TypeMaterial, Assembly, Tool, ActionLog, RepairLog, PrepItem, Payment, ToolLog } from '../types'
+import { create } from 'zustand';
+import { Material, BATTERY_TYPES, BatteryType } from '@/lib/constants';
 
-export interface AppState {
-  materials: Material[]
-  typeMaterials: TypeMaterial[]
-  assemblies: Assembly[]
-  batteryTypes: BatteryType[]
-  workers: Worker[]
-  tools: Tool[]
-  log: ActionLog[]
-  repairLog: RepairLog[]
-  prepItems: PrepItem[]
-  payments: Payment[]
-  toolLog: ToolLog[]
+interface AppStore {
+  materials: Material[];
+  productionLog: any[];
+  status: 'idle' | 'saving' | 'success' | 'error';
+  snakeActive: boolean;
   
-  status: 'idle' | 'loading' | 'saving' | 'success' | 'error'
-  error: string | null
-  toast: { msg: string, type: 'info' | 'err' } | null
-  
-  loadAll: () => Promise<void>
-  refresh: () => Promise<void>
-  showToast: (msg: string, type?: 'info' | 'err') => void
+  // Actions
+  addProduction: (typeId: string, qty: number, worker: string, serials: string[]) => Promise<void>;
+  setSnakeActive: (active: boolean) => void;
+  updateStock: (matId: string, amount: number) => void;
 }
 
-export const useAppStore = create<AppState>((set) => ({
-  materials: [],
-  typeMaterials: [],
-  assemblies: [],
-  batteryTypes: [],
-  workers: [],
-  tools: [],
-  log: [],
-  repairLog: [],
-  prepItems: [],
-  payments: [],
-  toolLog: [],
-  
+export const useAppStore = create<AppStore>((set, get) => ({
+  materials: [
+    { id: 'CELL_230', name: '230Ah Cells', unit: 'шт', stock: 100 },
+    { id: 'CELL_150', name: '150Ah Cells', unit: 'шт', stock: 50 },
+    { id: 'BMS_JK_16S', name: 'JK BMS 16S', unit: 'шт', stock: 10 },
+    { id: 'ANDERSON_175', name: 'Anderson 175A', unit: 'шт', stock: 20 },
+    // Mock data for initial dev
+  ],
+  productionLog: [],
   status: 'idle',
-  error: null,
-  toast: null,
-  
-  showToast: (msg, type = 'info') => {
-    set({ toast: { msg, type } })
-    setTimeout(() => {
-      set((state) => (state.toast?.msg === msg ? { toast: null } : {}))
-    }, 3000)
-  },
+  snakeActive: false,
 
-  loadAll: async () => {
-    set({ status: 'loading', error: null })
-    try {
-      const data = await gasCall<GlobalDataResponse>('loadAll', [])
-      set({
-        status: 'success',
-        materials: data.materials || [],
-        typeMaterials: data.typeMaterials || [],
-        assemblies: data.assemblies || [],
-        batteryTypes: data.batteryTypes || [],
-        workers: data.workers || [],
-        tools: data.tools || [],
-        log: data.log || [],
-        repairLog: data.repairLog || [],
-        prepItems: data.prepItems || [],
-        payments: data.payments || [],
-        toolLog: data.toolLog || []
-      })
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e)
-      set({ status: 'error', error: msg })
-    }
-  },
-  
-  refresh: async () => {
-    try {
-      const data = await gasCall<GlobalDataResponse>('loadAll', [])
-      set({
-        materials: data.materials || [],
-        typeMaterials: data.typeMaterials || [],
-        assemblies: data.assemblies || [],
-        batteryTypes: data.batteryTypes || [],
-        workers: data.workers || [],
-        tools: data.tools || [],
-        log: data.log || [],
-        repairLog: data.repairLog || [],
-        prepItems: data.prepItems || [],
-        payments: data.payments || [],
-        toolLog: data.toolLog || []
-      })
-    } catch (e) {
-      console.error('Failed to refresh data:', e)
-    }
+  setSnakeActive: (active) => set({ snakeActive: active }),
+
+  updateStock: (matId, amount) => set((state) => ({
+    materials: state.materials.map(m => 
+      m.id === matId ? { ...m, stock: m.stock + amount } : m
+    )
+  })),
+
+  addProduction: async (typeId, qty, worker, serials) => {
+    set({ status: 'saving' });
+    const type = BATTERY_TYPES.find(t => t.id === typeId);
+    if (!type) return set({ status: 'error' });
+
+    // Deduct BOM components
+    type.bom.forEach(item => {
+      get().updateStock(item.matId, -(item.qty * qty));
+    });
+
+    // Mock delay for "saving"
+    await new Promise(r => setTimeout(r, 1000));
+
+    set({ 
+      status: 'success', 
+      snakeActive: true,
+      productionLog: [
+        { id: Math.random().toString(), typeId, qty, worker, serials, date: new Date().toISOString() },
+        ...get().productionLog
+      ]
+    });
+
+    setTimeout(() => set({ status: 'idle' }), 2000);
   }
-}))
+}));

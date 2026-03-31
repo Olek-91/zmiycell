@@ -146,6 +146,8 @@ var ACTIONS = {
   returnPrep:             returnPrep,
   issueConsumable:        issueConsumable,
   addRepair:              addRepair,
+  addProductionEntry:     writeOff,
+  produceBatteries:       writeOff,
   updateRepairStatus:     updateRepairStatus,
   returnRepairMaterials:  returnRepairMaterials,
   deleteRepair:           deleteRepair,
@@ -297,10 +299,7 @@ function initSheets() {
     []
   )
 
-  ensureSheet(ss, SHEET.ACTION_LOG,
-    ['id','date','datetime','user','action_type','details'],
-    []
-  )
+  // ACTION_LOG вже ініціалізовано вище з заголовком 'actionType'
 
   ensureSheet(ss, SHEET.RADIO,
     ['id', 'name', 'url'],
@@ -1302,7 +1301,8 @@ function deleteRowWhere(sheetName, predicate) {
   var sh   = ss.getSheetByName(sheetName)
   if (!sh) return { ok: true }
   var data = sh.getDataRange().getValues()
-  for (var i = 1; i < data.length; i++) {
+  // Ітеруємо з кінця — так індекси не зсуваються при видаленні
+  for (var i = data.length - 1; i >= 1; i--) {
     if (predicate(data[i])) {
       sh.deleteRow(i + 1)
       return { ok: true }
@@ -1774,31 +1774,32 @@ function updateRepairStatus(repairId, status, dateCompleted, workerName, materia
     if (status === 'completed' && materialsJson) {
       var matSh = ss.getSheetByName(SHEET.MATERIALS)
       var matData = matSh.getDataRange().getValues()
-      var mats = decompressMats(materialsJson, matData)
+      // Використовуємо decompressConsumed (підтримує формат fromStock:fromPersonal:fromTeam)
+      var mats = decompressConsumed(materialsJson, matData)
       mats.forEach(function(m) {
-        if (!m.selected || !m.qty) return
+        // Списуємо ТІЛЬКИ fromStock — матеріали з заготовок вже були списані при прийомці
+        var fromStock = num(m.fromStock || 0)
+        if (fromStock <= 0) return
         for (var j = 1; j < matData.length; j++) {
           if (String(matData[j][0]) === String(m.matId)) {
             var cur = +matData[j][3] || 0
-            var nv  = Math.max(0, +(cur - m.qty).toFixed(4))
+            var nv  = Math.max(0, +(cur - fromStock).toFixed(4))
             matSh.getRange(j + 1, 4).setValue(nv)
             matData[j][3] = nv
-            consumed.push({ matId: m.matId, name: m.matName, unit: m.unit, amount: m.qty })
+            consumed.push({ matId: m.matId, name: m.name, unit: m.unit, amount: fromStock })
             break
           }
         }
       })
-      // Write logic to replace existing materials json in the repair sheet
-      var curMats = json(row[9], [])
-      var allMats = curMats.concat(mats.filter(function(m){return m.selected && m.qty>0}))
-      repSh.getRange(foundIndex + 1, 10).setValue(JSON.stringify(allMats))
+      // Зберігаємо consumed у запис ремонту
+      repSh.getRange(foundIndex + 1, 10).setValue(JSON.stringify(mats))
       
-      // Update repair worker if provided
+      // Оновлюємо ремонтника якщо передано
       if (workerName) {
-        repSh.getRange(foundIndex + 1, 8).setValue(workerName) // original worker is col 7, repair worker col 8
+        repSh.getRange(foundIndex + 1, 8).setValue(workerName)
       }
       
-      // Log consumption
+      // Логуємо списання
       var logSh = ss.getSheetByName(SHEET.LOG)
       if (consumed.length > 0) {
         var datetime = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd.MM.yyyy HH:mm")
@@ -1831,9 +1832,7 @@ function updateRepairStatus(repairId, status, dateCompleted, workerName, materia
   })
 }
 
-function num(v)       { return parseFloat(v) || 0 }
-function int(v)       { return parseInt(v)   || 0 }
-function json(s, def) { try { return s ? JSON.parse(s) : def } catch(_) { return def } }
+// num / int / json вже оголошені вище (рядки ~1339)
 
 function decompressConsumed(val, matData) {
   if (!val) return []
@@ -2035,19 +2034,7 @@ function logPrepEntry(entry) {
 }
 
 
-function deleteRowWhere(sheetName, predicate) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet()
-  var sh = ss.getSheetByName(sheetName)
-  if (!sh) return { ok: false, error: 'Sheet not found' }
-  var data = sh.getDataRange().getValues()
-  for (var i = data.length - 1; i >= 1; i--) {
-    if (predicate(data[i])) {
-      sh.deleteRow(i + 1)
-      return { ok: true }
-    }
-  }
-  return { ok: false, error: 'Row not found' }
-}
+// deleteRowWhere визначена вище (~рядок 1302) — дублікат видалено
 
 function saveRadioStation(station) {
   var ss = SpreadsheetApp.getActiveSpreadsheet()

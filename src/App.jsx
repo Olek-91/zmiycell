@@ -2102,8 +2102,8 @@ function AppInner({ isAdmin, onLogout }) {
       if (s) {
         const pending = repairLog.find(r => String(r.serial) === String(s) && r.status !== 'completed')
         if (pending) {
-          showToast(`⚠ Акумулятор ${s} вже в очікуванні ремонту!`, 'err')
-          return // block proceeding
+          // Попереджаємо, але НЕ блокуємо — можливо потрібно переглянути або дублювати запис
+          showToast(`⚠ Акум ${s} вже чекає ремонту (pending)`, 'err')
         }
       }
       setRepairSerial(s)
@@ -2136,9 +2136,21 @@ function AppInner({ isAdmin, onLogout }) {
     }
 
     const handleManualRegister = () => {
-      const t = batteryTypes.find(t => String(t.id) === String(manTypeId))
-      const w = workers.find(w => String(w.id) === String(manWorkerId))
-      const entry = { id: uid(), datetime: nowStr(), date: manDate, typeId: manTypeId, typeName: t?.name || '', workerName: w?.name || '', count: 1, serials: [serial], consumed: [], kind: 'production', repairNote: '' }
+      // Якщо користувач не вибрав тип/працівника — беремо перший доступний
+      const effectiveTypeId = manTypeId || batteryTypes[0]?.id || ''
+      const effectiveWorkerId = manWorkerId || workers[0]?.id || ''
+      const t = batteryTypes.find(t => String(t.id) === String(effectiveTypeId))
+      const w = workers.find(w => String(w.id) === String(effectiveWorkerId))
+      
+      // Duplicate check before manual registration
+      const alreadyInLog = log.find(l => (l.serials || []).some(s => String(s).trim().toLowerCase() === serial.trim().toLowerCase()))
+      if (alreadyInLog) {
+        showToast(`⚠ Акумулятор ${serial} вже зареєстрований як ${alreadyInLog.typeName}!`, 'err')
+        setRepairSerial(serial.trim()) // force re-find to switch UI
+        return
+      }
+
+      const entry = { id: uid(), datetime: nowStr(), date: manDate, typeId: effectiveTypeId, typeName: t?.name || '', workerName: w?.name || '', count: 1, serials: [serial], consumed: [], kind: 'production', repairNote: '' }
       
       openConfirm('ЗАРЕЄСТРУВАТИ ВРУЧНУ?', 
         <div style={{ fontSize: 13 }}>
@@ -2147,7 +2159,7 @@ function AppInner({ isAdmin, onLogout }) {
         async () => {
           closeModal()
           try {
-            await api('addProductionEntry', [entry]) // Added generic API call for production
+            await api('writeOff', [entry]) // Use writeOff directly as it definitely exists
             setLog(prev => [entry, ...prev])
             showToast('✓ Зареєстровано ' + serial)
           } catch (e) {
@@ -2280,8 +2292,11 @@ function AppInner({ isAdmin, onLogout }) {
           </FormRow>
         </Card>
 
-        {serial && found && repType && <Card style={{ borderColor: G.gn }}>
-          <div style={{ color: G.gn, fontSize: 12, marginBottom: 12 }}>✓ Знайдено: {found.typeName} · <span style={{ color: getWorkerColor(found.workerName), fontWeight: 600 }}>{found.workerName}</span> · {found.date}</div>
+        {serial && found && <Card style={{ borderColor: repType ? G.gn : G.yw }}>
+          <div style={{ color: repType ? G.gn : G.yw, fontSize: 12, marginBottom: 12 }}>
+            {repType ? '✓ Знайдено' : '⚠ Знайдено'}: {found.typeName} · <span style={{ color: getWorkerColor(found.workerName), fontWeight: 600 }}>{found.workerName}</span> · {found.date}
+            {!repType && <span style={{ color: G.t2, fontSize: 11, display: 'block', marginTop: 4 }}>(Тип ID:{found.typeId} не знайдено — прийом все одно дозволений)</span>}
+          </div>
           <FormRow label="ДАТА ПРИЙОМКИ"><input value={repDate} onChange={e => setRepDate(e.target.value)} /></FormRow>
           <FormRow label="ОПИС НЕСПРАВНОСТІ / НОТАТКА"><input value={repNote} onChange={e => setRepNote(e.target.value)} placeholder="напр. не заряджається" /></FormRow>
           <FormRow label="ФОТО (URL-посилання)"><input value={repPhotoUrl} onChange={e => setRepPhotoUrl(e.target.value)} placeholder="https://example.com/photo.jpg" /></FormRow>
