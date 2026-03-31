@@ -2020,7 +2020,7 @@ function AppInner({ isAdmin, onLogout }) {
               {materials.map(m => {
                 const checked = editAsmComps.hasOwnProperty(m.id)
                 const qty = checked ? (editAsmComps[m.id] ?? '') : ''
-                return <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: `1px solid ${G.b1}`, fontSize: 13 }}>
+                return <div key={m.id} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: `1px solid ${G.b1}`, fontSize: 13 }}>
                   <input type="checkbox" checked={checked} onChange={e => {
                     const chk = e.target.checked
                     setEditAsmComps(v => {
@@ -2030,16 +2030,16 @@ function AppInner({ isAdmin, onLogout }) {
                       return next
                     })
                   }} style={{ width: 18, height: 18, accentColor: '#a78bfa', cursor: 'pointer', flexShrink: 0 }} />
-                  <div style={{ flex: 1, color: checked ? G.t1 : G.t2 }}>{m.name}</div>
-                  {checked && <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <div style={{ flex: '1 1 120px', color: checked ? G.t1 : G.t2, minWidth: 120, wordBreak: 'break-word', lineHeight: 1.3 }}>{m.name}</div>
+                  {checked && <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
                     <input type="number" min="0" step="any" value={qty} onChange={e => setEditAsmComps(v => ({ ...v, [m.id]: e.target.value }))} style={{ width: 70, border: `2px solid #a78bfa`, background: '#2e1065', color: G.t1, fontWeight: 'bold', textAlign: 'center', padding: '4px' }} placeholder="кількість" />
                     <span style={{ color: G.t2, fontSize: 12, width: 24 }}>{m.unit}</span>
                   </div>}
                 </div>
               })}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, padding: '8px 0', borderTop: `1px dashed ${G.b1}` }}>
-                <input id={`edit-uni-${a.id}`} type="checkbox" checked={editAsmIsUniversal} onChange={e => setEditAsmIsUniversal(e.target.checked)} style={{ width: 18, height: 18, accentColor: G.gn }} />
-                <label htmlFor={`edit-uni-${a.id}`} style={{ fontSize: 13, color: G.t1, fontWeight: 700 }}>🌎 УНІВЕРСАЛЬНА ЗБІРКА (розкладати в калькуляторі)</label>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 12, padding: '8px 0', borderTop: `1px dashed ${G.b1}` }}>
+                <input id={`edit-uni-${a.id}`} type="checkbox" checked={editAsmIsUniversal} onChange={e => setEditAsmIsUniversal(e.target.checked)} style={{ width: 18, height: 18, accentColor: G.gn, flexShrink: 0, marginTop: 2 }} />
+                <label htmlFor={`edit-uni-${a.id}`} style={{ fontSize: 13, color: G.t1, fontWeight: 700, lineHeight: 1.3, wordBreak: 'break-word' }}>🌎 УНІВЕРСАЛЬНА ЗБІРКА (розкладати в калькуляторі)</label>
               </div>
             </div>}
           </div>
@@ -2055,7 +2055,7 @@ function AppInner({ isAdmin, onLogout }) {
               {materials.map(m => {
                 const checked = newAsmComps.hasOwnProperty(m.id)
                 const qty = checked ? (newAsmComps[m.id] ?? '') : ''
-                return <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderBottom: `1px solid ${G.b1}`, fontSize: 13 }}>
+                return <div key={m.id} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, padding: '4px 0', borderBottom: `1px solid ${G.b1}`, fontSize: 13 }}>
                   <input type="checkbox" checked={checked} onChange={e => {
                     const chk = e.target.checked
                     setNewAsmComps(v => {
@@ -2065,8 +2065,8 @@ function AppInner({ isAdmin, onLogout }) {
                       return next
                     })
                   }} style={{ width: 16, height: 16, accentColor: '#a78bfa', cursor: 'pointer', flexShrink: 0 }} />
-                  <div style={{ flex: 1, color: checked ? G.t1 : G.t2 }}>{m.name}</div>
-                  {checked && <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <div style={{ flex: '1 1 120px', color: checked ? G.t1 : G.t2, minWidth: 120, wordBreak: 'break-word', lineHeight: 1.3 }}>{m.name}</div>
+                  {checked && <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
                     <input type="number" min="0" step="any" value={qty} onChange={e => setNewAsmComps(v => ({ ...v, [m.id]: e.target.value }))} style={{ width: 80, border: `2px solid #a78bfa`, background: '#2e1065', color: G.t1, fontWeight: 'bold', textAlign: 'center', padding: '4px', fontSize: 13 }} placeholder="кільк." />
                     <span style={{ color: G.t2, fontSize: 12, width: 24 }}>{m.unit}</span>
                   </div>}
@@ -2093,9 +2093,9 @@ function AppInner({ isAdmin, onLogout }) {
               </select>
             </FormRow>
             <FormRow label="Нотатка для працівника"><input placeholder="напр. інструкція щодо пайки" value={newAsmNotes} onChange={e => setNewAsmNotes(e.target.value)} /></FormRow>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-              <input id="new-asm-uni" type="checkbox" checked={newAsmIsUniversal} onChange={e => setNewAsmIsUniversal(e.target.checked)} style={{ width: 20, height: 20, accentColor: G.gn }} />
-              <label htmlFor="new-asm-uni" style={{ fontSize: 14, color: G.gn, fontWeight: 700 }}>🌎 УНІВЕРСАЛЬНА ЗБІРКА (розкладати в калькуляторі)</label>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 16 }}>
+              <input id="new-asm-uni" type="checkbox" checked={newAsmIsUniversal} onChange={e => setNewAsmIsUniversal(e.target.checked)} style={{ width: 20, height: 20, accentColor: G.gn, flexShrink: 0, marginTop: 2 }} />
+              <label htmlFor="new-asm-uni" style={{ fontSize: 14, color: G.gn, fontWeight: 700, lineHeight: 1.3, wordBreak: 'break-word' }}>🌎 УНІВЕРСАЛЬНА ЗБІРКА (розкладати в калькуляторі)</label>
             </div>
             <SubmitBtn onClick={createAsm} color='#a78bfa'>+ ЗБЕРЕГТИ ЗБІРКУ ТА ЇЇ СКЛАД</SubmitBtn>
           </div>
