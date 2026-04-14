@@ -428,7 +428,7 @@ function PrepTab({ batteryTypes, workers, assemblies, materials, prepItems, onIs
       {list.length === 0 ? <div style={{ color: G.t2, fontSize: 13 }}>Пусто</div> :
         list.map((g, i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: `1px solid ${G.card2}`, fontSize: 13 }}>
           <div><span style={{ fontWeight: 600, color: getWorkerColor(g.workerName) }}>{g.workerName}</span> <span style={{ color: G.t2, fontSize: 11 }}>({g.scope === 'all' ? 'всі' : 'осб'})</span><br /><span style={{ color: G.t1 }}>{g.matName}</span></div>
-          <div style={{ fontWeight: 700, color: G.pu }}>{+g.amount.toFixed(4)} {g.unit}</div>
+          <div style={{ fontWeight: 700, color: G.pu }}>{+g.amount.toFixed(2)} {g.unit}</div>
         </div>)
       }
     </Card>
@@ -473,7 +473,7 @@ function PrepTab({ batteryTypes, workers, assemblies, materials, prepItems, onIs
           <div style={{ fontSize: 11, color: G.t2, marginBottom: 6, fontWeight: 700 }}>КОМПОНЕНТИ (на {qty} шт)</div>
           {asm.components.map(ac => {
             const gm = materials.find(m => m.id === ac.matId)
-            const need = +(ac.qty * qty).toFixed(4)
+            const need = +(ac.qty * qty).toFixed(2)
             const ok = gm && gm.stock >= need
             return <div key={ac.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '2px 0', color: ok ? G.t1 : G.rd }}>
               <span>{gm?.name || ac.matId}</span>
@@ -526,7 +526,7 @@ function PrepTab({ batteryTypes, workers, assemblies, materials, prepItems, onIs
       {activeGrouped.length === 0
         ? <div style={{ color: G.t2, fontSize: 13, padding: '6px 0' }}>Немає активних видач</div>
         : activeGrouped.sort((a, b) => a.workerName.localeCompare(b.workerName)).map(g => {
-          const avail = +(g.totalQty - g.totalReturned).toFixed(4)
+          const avail = +(g.totalQty - g.totalReturned).toFixed(2)
           const t = g.typeId === 'ALL' ? { name: 'для всіх типів' } : batteryTypes.find(x => x.id === g.typeId)
           const gid = `${g.workerId}_${g.matId}_${g.typeId}_${g.scope}`
           return <div key={gid} style={{ background: G.card2, borderRadius: 10, padding: 12, marginBottom: 8 }}>
@@ -817,33 +817,33 @@ function AppInner({ isAdmin, onLogout }) {
       a.components.forEach(ac => {
         const cgm = globalMat(ac.matId)
         if (!cgm) return
-        const compAmt = +(ac.qty * batchesNeeded).toFixed(4)
+        const compAmt = +(ac.qty * batchesNeeded).toFixed(2)
         
         // Перевіряємо скільки є на руках (якщо передано workerId)
         const onHand = !workerId ? 0 : prepItems
           .filter(p => p.matId == ac.matId && (p.workerId == workerId || p.scope === 'all') && p.status !== 'returned')
-          .reduce((s, p) => +(s + p.qty - p.returnedQty).toFixed(4), 0)
+          .reduce((s, p) => +(s + p.qty - p.returnedQty).toFixed(2), 0)
         
         const stock = cgm.stock || 0
-        const fromPersonal = +Math.min(onHand, compAmt).toFixed(4)
-        const remNeed = +(compAmt - fromPersonal).toFixed(4)
-        const fromStock = +Math.min(stock, remNeed).toFixed(4)
+        const fromPersonal = +Math.min(onHand, compAmt).toFixed(2)
+        const remNeed = +(compAmt - fromPersonal).toFixed(2)
+        const fromStock = +Math.min(stock, remNeed).toFixed(2)
 
         if (fromPersonal + fromStock >= compAmt) {
           allSubs.push({ matId: ac.matId, name: cgm.name, unit: cgm.unit, amount: compAmt, fromPersonal, fromTeam: 0, fromStock, totalStock: stock, isSubstitute: true, substituteFor: parentName })
         } else {
           // Якщо частин все одно не вистачає - пробуємо розкласти їх (рекурсія)
           if (fromPersonal + fromStock > 0) {
-            allSubs.push({ matId: ac.matId, name: cgm.name, unit: cgm.unit, amount: +(fromPersonal + fromStock).toFixed(4), fromPersonal, fromTeam: 0, fromStock, totalStock: stock, isSubstitute: true, substituteFor: parentName })
+            allSubs.push({ matId: ac.matId, name: cgm.name, unit: cgm.unit, amount: +(fromPersonal + fromStock).toFixed(2), fromPersonal, fromTeam: 0, fromStock, totalStock: stock, isSubstitute: true, substituteFor: parentName })
           }
-          const nestedDeficit = +(compAmt - fromPersonal - fromStock).toFixed(4)
+          const nestedDeficit = +(compAmt - fromPersonal - fromStock).toFixed(2)
           const nestedSubs = resolve(ac.matId, nestedDeficit, cgm.name)
           if (nestedSubs) {
             allSubs.push(...nestedSubs)
           } else {
             // Реальний дефіцит компонента (сануємо екстремальні від'ємні значення)
             const safeStock = stock < -1000000 ? 0 : stock
-            const safeDeficit = Math.max(0, +(compAmt - fromPersonal - safeStock).toFixed(4))
+            const safeDeficit = Math.max(0, +(compAmt - fromPersonal - safeStock).toFixed(2))
             allSubs.push({ matId: ac.matId, name: cgm.name, unit: cgm.unit, amount: safeDeficit, fromPersonal: 0, fromTeam: 0, fromStock: safeDeficit, totalStock: stock, isSubstitute: true, substituteFor: parentName })
           }
         }
@@ -865,10 +865,10 @@ function AppInner({ isAdmin, onLogout }) {
       const id = String(item.matId)
       const ex = map.get(id)
       if (ex) {
-        ex.amount = +(ex.amount + item.amount).toFixed(4)
-        ex.fromPersonal = +(ex.fromPersonal + item.fromPersonal).toFixed(4)
-        ex.fromTeam = +(ex.fromTeam + item.fromTeam).toFixed(4)
-        ex.fromStock = +(ex.fromStock + item.fromStock).toFixed(4)
+        ex.amount = +(ex.amount + item.amount).toFixed(2)
+        ex.fromPersonal = +(ex.fromPersonal + item.fromPersonal).toFixed(2)
+        ex.fromTeam = +(ex.fromTeam + item.fromTeam).toFixed(2)
+        ex.fromStock = +(ex.fromStock + item.fromStock).toFixed(2)
       } else {
         map.set(id, { ...item })
       }
@@ -878,19 +878,19 @@ function AppInner({ isAdmin, onLogout }) {
       const gm = globalMat(tm.matId)
       if (!gm) return
 
-      let need = +(tm.perBattery * qty).toFixed(4)
+      let need = +(tm.perBattery * qty).toFixed(2)
       const needOrig = need
 
-      const pAvail = myPrep.filter(p => p.matId == tm.matId).reduce((s, p) => +(s + p.qty - p.returnedQty).toFixed(4), 0)
-      const fromPersonal = +Math.min(pAvail, need).toFixed(4)
-      need = +(need - fromPersonal).toFixed(4)
+      const pAvail = myPrep.filter(p => p.matId == tm.matId).reduce((s, p) => +(s + p.qty - p.returnedQty).toFixed(2), 0)
+      const fromPersonal = +Math.min(pAvail, need).toFixed(2)
+      need = +(need - fromPersonal).toFixed(2)
 
-      const aAvail = allPrep.filter(p => p.matId == tm.matId).reduce((s, p) => +(s + p.qty - p.returnedQty).toFixed(4), 0)
-      const fromTeam = +Math.min(aAvail, need).toFixed(4)
-      need = +(need - fromTeam).toFixed(4)
+      const aAvail = allPrep.filter(p => p.matId == tm.matId).reduce((s, p) => +(s + p.qty - p.returnedQty).toFixed(2), 0)
+      const fromTeam = +Math.min(aAvail, need).toFixed(2)
+      need = +(need - fromTeam).toFixed(2)
 
-      const fromStockDirect = +Math.min(gm.stock, need).toFixed(4)
-      const deficit = +(need - fromStockDirect).toFixed(4)
+      const fromStockDirect = +Math.min(gm.stock, need).toFixed(2)
+      const deficit = +(need - fromStockDirect).toFixed(2)
 
       if (deficit > 0) {
         const subs = expandAssemblyFallback(tm.matId, deficit, gm.name, workerId, type.id)
@@ -918,10 +918,10 @@ function AppInner({ isAdmin, onLogout }) {
       const id = String(item.matId)
       const ex = map.get(id)
       if (ex) {
-        ex.amount = +(ex.amount + item.amount).toFixed(4)
-        ex.fromPersonal = +(ex.fromPersonal + item.fromPersonal).toFixed(4)
-        ex.fromTeam = +(ex.fromTeam + item.fromTeam).toFixed(4)
-        ex.fromStock = +(ex.fromStock + item.fromStock).toFixed(4)
+        ex.amount = +(ex.amount + item.amount).toFixed(2)
+        ex.fromPersonal = +(ex.fromPersonal + item.fromPersonal).toFixed(2)
+        ex.fromTeam = +(ex.fromTeam + item.fromTeam).toFixed(2)
+        ex.fromStock = +(ex.fromStock + item.fromStock).toFixed(2)
       } else {
         map.set(id, { ...item })
       }
@@ -930,17 +930,17 @@ function AppInner({ isAdmin, onLogout }) {
     assembly.components.forEach(ac => {
       const gm = globalMat(ac.matId)
       if (!gm) return
-      let need = +(ac.qty * qty).toFixed(4)
+      let need = +(ac.qty * qty).toFixed(2)
       const needOrig = need
-      const pAvail = myPrep.filter(p => p.matId === ac.matId).reduce((s, p) => +(s + p.qty - p.returnedQty).toFixed(4), 0)
-      const fromPersonal = +Math.min(pAvail, need).toFixed(4)
-      need = +(need - fromPersonal).toFixed(4)
-      const aAvail = allPrep.filter(p => p.matId === ac.matId).reduce((s, p) => +(s + p.qty - p.returnedQty).toFixed(4), 0)
-      const fromTeam = +Math.min(aAvail, need).toFixed(4)
-      need = +(need - fromTeam).toFixed(4)
+      const pAvail = myPrep.filter(p => p.matId === ac.matId).reduce((s, p) => +(s + p.qty - p.returnedQty).toFixed(2), 0)
+      const fromPersonal = +Math.min(pAvail, need).toFixed(2)
+      need = +(need - fromPersonal).toFixed(2)
+      const aAvail = allPrep.filter(p => p.matId === ac.matId).reduce((s, p) => +(s + p.qty - p.returnedQty).toFixed(2), 0)
+      const fromTeam = +Math.min(aAvail, need).toFixed(2)
+      need = +(need - fromTeam).toFixed(2)
 
-      const fromStockDirect = +Math.min(gm.stock, need).toFixed(4)
-      const deficit = +(need - fromStockDirect).toFixed(4)
+      const fromStockDirect = +Math.min(gm.stock, need).toFixed(2)
+      const deficit = +(need - fromStockDirect).toFixed(2)
 
       if (deficit > 0) {
         const subs = expandAssemblyFallback(ac.matId, deficit, gm.name, workerId, 'ALL')
@@ -966,24 +966,24 @@ function AppInner({ isAdmin, onLogout }) {
     repairMaterials.forEach(rm => {
       const gm = globalMat(rm.matId)
       if (!gm) return
-      let need = +rm.qty.toFixed(4)
+      let need = +rm.qty.toFixed(2)
       const needOrig = need
-      const pAvail = myPrep.filter(p => p.matId == rm.matId).reduce((s, p) => +(s + p.qty - p.returnedQty).toFixed(4), 0)
-      const fromPersonal = +Math.min(pAvail, need).toFixed(4)
-      need = +(need - fromPersonal).toFixed(4)
-      const aAvail = allPrep.filter(p => p.matId == rm.matId).reduce((s, p) => +(s + p.qty - p.returnedQty).toFixed(4), 0)
-      const fromTeam = +Math.min(aAvail, need).toFixed(4)
-      need = +(need - fromTeam).toFixed(4)
+      const pAvail = myPrep.filter(p => p.matId == rm.matId).reduce((s, p) => +(s + p.qty - p.returnedQty).toFixed(2), 0)
+      const fromPersonal = +Math.min(pAvail, need).toFixed(2)
+      need = +(need - fromPersonal).toFixed(2)
+      const aAvail = allPrep.filter(p => p.matId == rm.matId).reduce((s, p) => +(s + p.qty - p.returnedQty).toFixed(2), 0)
+      const fromTeam = +Math.min(aAvail, need).toFixed(2)
+      need = +(need - fromTeam).toFixed(2)
 
-      const fromStockDirect = +Math.min(gm.stock, need).toFixed(4)
-      const deficit = +(need - fromStockDirect).toFixed(4)
+      const fromStockDirect = +Math.min(gm.stock, need).toFixed(2)
+      const deficit = +(need - fromStockDirect).toFixed(2)
 
       if (deficit > 0) {
         const subs = expandAssemblyFallback(rm.matId, deficit, gm.name, workerId, 'ALL')
         if (subs) {
           subs.forEach(sub => {
             const ex = result.find(r => r.matId == sub.matId && r.isSubstitute)
-            if (ex) { ex.amount = +(ex.amount + sub.amount).toFixed(4); ex.fromStock = +(ex.fromStock + sub.fromStock).toFixed(4) }
+            if (ex) { ex.amount = +(ex.amount + sub.amount).toFixed(2); ex.fromStock = +(ex.fromStock + sub.fromStock).toFixed(2) }
             else result.push(sub)
           })
           result.push({ matId: rm.matId, name: gm.name, unit: gm.unit, amount: needOrig, fromPersonal, fromTeam, fromStock: fromStockDirect, totalStock: gm.stock })
@@ -1007,7 +1007,7 @@ function AppInner({ isAdmin, onLogout }) {
         console.warn('Suspicious stock update rejected:', delta)
         return m
       }
-      return { ...m, stock: Math.max(-10000, +(m.stock + delta).toFixed(4)) }
+      return { ...m, stock: Math.max(-10000, +(m.stock + delta).toFixed(2)) }
     }))
   }, [])
   // ════════════════════════════════════════════════════════
@@ -1054,9 +1054,9 @@ function AppInner({ isAdmin, onLogout }) {
                   if (rem <= 0) return
                   const avail = p.qty - p.returnedQty
                   const use = Math.min(avail, rem)
-                  p.returnedQty = +(p.returnedQty + use).toFixed(4)
+                  p.returnedQty = +(p.returnedQty + use).toFixed(2)
                   p.status = p.returnedQty >= p.qty ? 'returned' : 'partial'
-                  rem = +(rem - use).toFixed(4)
+                  rem = +(rem - use).toFixed(2)
                 })
               }
               doDeduct(false, c.fromPersonal)
@@ -1073,7 +1073,7 @@ function AppInner({ isAdmin, onLogout }) {
             return m && (m.stock - (c.fromStock > 0 ? c.fromStock : 0)) <= m.minStock && m.minStock > 0
           })
           if (lowMats.length > 0) {
-            const lines = lowMats.map(c => { const m = globalMat(c.matId); const ns = Math.max(0, +(m.stock - c.fromStock).toFixed(4)); return `• ${m.name}: ${ns} ${m.unit} (мін: ${m.minStock})` }).join('\n')
+            const lines = lowMats.map(c => { const m = globalMat(c.matId); const ns = Math.max(0, +(m.stock - c.fromStock).toFixed(2)); return `• ${m.name}: ${ns} ${m.unit} (мін: ${m.minStock})` }).join('\n')
             sendTelegram(`⚠️ ZmiyCell — низький запас\n\n${lines}`)
           }
         } catch { }
@@ -1107,7 +1107,7 @@ function AppInner({ isAdmin, onLogout }) {
     // Перевіряємо наявність компонентів на складі
     const shortage = asm.components.find(ac => {
       const gm = materials.find(m => m.id === ac.matId)
-      return !gm || gm.stock < +(ac.qty * qty).toFixed(4)
+      return !gm || gm.stock < +(ac.qty * qty).toFixed(2)
     })
     if (shortage) {
       const gm = materials.find(m => m.id === shortage.matId)
@@ -1115,7 +1115,7 @@ function AppInner({ isAdmin, onLogout }) {
     }
 
     // Одна позиція в заготовці — готовий виріб (вихідний матеріал збірки)
-    const outputQty = +(asm.outputQty * qty).toFixed(4)
+    const outputQty = +(asm.outputQty * qty).toFixed(2)
     const outputMat = materials.find(m => m.id === asm.outputMatId)
     const prepItem = {
       id: uid(),
@@ -1142,7 +1142,7 @@ function AppInner({ isAdmin, onLogout }) {
           Компоненти (будуть списані зі складу):
           {asm.components.map(ac => {
             const gm = materials.find(m => m.id === ac.matId)
-            return <div key={ac.id}>• {gm?.name || ac.matId}: -{+(ac.qty * qty).toFixed(4)} {gm?.unit || ''}</div>
+            return <div key={ac.id}>• {gm?.name || ac.matId}: -{+(ac.qty * qty).toFixed(2)} {gm?.unit || ''}</div>
           })}
         </div>
       </div>,
@@ -1151,7 +1151,7 @@ function AppInner({ isAdmin, onLogout }) {
         try {
           await api('addPrepItemsDirect', [[prepItem]])
           // Списуємо компоненти зі складу
-          asm.components.forEach(ac => updateGlobalStock(ac.matId, -(+(ac.qty * qty).toFixed(4))))
+          asm.components.forEach(ac => updateGlobalStock(ac.matId, -(+(ac.qty * qty).toFixed(2))))
           setPrepItems(prev => [prepItem, ...prev])
           const logEntry = {
             id: uid() + 'P',
@@ -1164,7 +1164,7 @@ function AppInner({ isAdmin, onLogout }) {
             serials: [],
             consumed: asm.components.map(ac => {
               const gm = materials.find(m => m.id === ac.matId)
-              return { name: gm?.name || ac.matId, unit: gm?.unit || '', amount: +(ac.qty * qty).toFixed(4) }
+              return { name: gm?.name || ac.matId, unit: gm?.unit || '', amount: +(ac.qty * qty).toFixed(2) }
             }),
             kind: 'prep',
             repairNote: `📦 Видача: ${prepItem.matName} × ${outputQty} ${prepItem.unit}`,
@@ -1207,12 +1207,12 @@ function AppInner({ isAdmin, onLogout }) {
       const updates = []
       for (const item of sorted) {
         if (rem <= 0) break
-        const itemAvail = +(item.qty - item.returnedQty).toFixed(4)
+        const itemAvail = +(item.qty - item.returnedQty).toFixed(2)
         const use = Math.min(itemAvail, rem)
         if (use > 0) {
           await api('returnPrep', [item.id, use])
           updates.push({ id: item.id, use })
-          rem = +(rem - use).toFixed(4)
+          rem = +(rem - use).toFixed(2)
         }
       }
       
@@ -1220,7 +1220,7 @@ function AppInner({ isAdmin, onLogout }) {
       setPrepItems(prev => prev.map(p => {
         const up = updates.find(u => String(u.id) === String(p.id))
         if (!up) return p
-        const nr = +(p.returnedQty + up.use).toFixed(4)
+        const nr = +(p.returnedQty + up.use).toFixed(2)
         return { ...p, returnedQty: nr, status: nr >= p.qty ? 'returned' : 'partial' }
       }))
       showToast(`✓ Повернено ${all ? totalAvail : customQty} ${unit}`)
@@ -1241,7 +1241,7 @@ function AppInner({ isAdmin, onLogout }) {
       matId: gm.id,
       matName: gm.name,
       unit: gm.unit || '',
-      qty: +qty.toFixed(4),
+      qty: +qty.toFixed(2),
       returnedQty: 0,
       date: todayStr(),
       datetime: nowStr(),
@@ -1271,7 +1271,7 @@ function AppInner({ isAdmin, onLogout }) {
             workerName: worker.name,
             count: 0,
             serials: [],
-            consumed: [{ name: gm.name, unit: gm.unit, amount: +qty.toFixed(4) }],
+            consumed: [{ name: gm.name, unit: gm.unit, amount: +qty.toFixed(2) }],
             kind: 'prep',
             repairNote: `📦 Видача: ${gm.name} × ${qty} ${gm.unit}`,
             prepIds: [item.id],
@@ -1287,14 +1287,14 @@ function AppInner({ isAdmin, onLogout }) {
   const doWriteoffPrep = async (prepId) => {
     const item = prepItems.find(p => String(p.id) === String(prepId))
     if (!item) return
-    const avail = +(item.qty - item.returnedQty).toFixed(4)
+    const avail = +(item.qty - item.returnedQty).toFixed(2)
     openConfirm('Остаточне списання',
       <div style={{ fontSize: 13, color: G.t2, lineHeight: 1.8 }}>Списати <b style={{ color: G.or }}>{avail} {item.unit}</b> ({item.matName}) без повернення на склад?</div>,
       async () => {
         closeModal()
         try {
           await api('returnPrep', [prepId, avail])
-          setPrepItems(prev => prev.map(p => String(p.id) !== String(prepId) ? p : { ...p, returnedQty: +(p.returnedQty + avail).toFixed(4), status: 'returned' }))
+          setPrepItems(prev => prev.map(p => String(p.id) !== String(prepId) ? p : { ...p, returnedQty: +(p.returnedQty + avail).toFixed(2), status: 'returned' }))
           showToast(`✓ Списано безповоротно: ${avail} ${item.unit}`)
         } catch { }
       }
@@ -1315,7 +1315,7 @@ function AppInner({ isAdmin, onLogout }) {
       return showToast('Не вистачає: ' + shortage.name, 'err')
     }
 
-    const outputAmt = +(asm.outputQty * asmQty).toFixed(4)
+    const outputAmt = +(asm.outputQty * asmQty).toFixed(2)
     openConfirm('Підтвердити виготовлення',
       <div style={{ fontSize: 13, color: G.t2, lineHeight: 1.8 }}>
         <b style={{ color: G.or }}>{asm.name}</b><br />
@@ -1357,9 +1357,9 @@ function AppInner({ isAdmin, onLogout }) {
                   if (rem <= 0) return
                   const avail = p.qty - p.returnedQty
                   const use = Math.min(avail, rem)
-                  p.returnedQty = +(p.returnedQty + use).toFixed(4)
+                  p.returnedQty = +(p.returnedQty + use).toFixed(2)
                   p.status = p.returnedQty >= p.qty ? 'returned' : 'partial'
-                  rem = +(rem - use).toFixed(4)
+                  rem = +(rem - use).toFixed(2)
                 })
               }
               doDeduct(false, c.fromPersonal)
@@ -1469,9 +1469,9 @@ function AppInner({ isAdmin, onLogout }) {
                   if (rem <= 0) return
                   const avail = p.qty - p.returnedQty
                   const use = Math.min(avail, rem)
-                  p.returnedQty = +(p.returnedQty + use).toFixed(4)
+                  p.returnedQty = +(p.returnedQty + use).toFixed(2)
                   p.status = p.returnedQty >= p.qty ? 'returned' : 'partial'
-                  rem = +(rem - use).toFixed(4)
+                  rem = +(rem - use).toFixed(2)
                 })
               }
               doDeduct(false, c.fromPersonal)
@@ -1572,7 +1572,7 @@ function AppInner({ isAdmin, onLogout }) {
         })}
         <div style={{ borderTop: `1px solid ${G.b2}`, marginTop: 12, paddingTop: 12, display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
           <span style={{ color: G.t2 }}>Отримаємо:</span>
-          <span style={{ color: '#a78bfa', fontWeight: 800 }}>+{+(curAsm.outputQty * asmQty).toFixed(4)} {globalMat(curAsm.outputMatId)?.unit || curAsm.unit} {globalMat(curAsm.outputMatId)?.name || ''}</span>
+          <span style={{ color: '#a78bfa', fontWeight: 800 }}>+{+(curAsm.outputQty * asmQty).toFixed(2)} {globalMat(curAsm.outputMatId)?.unit || curAsm.unit} {globalMat(curAsm.outputMatId)?.name || ''}</span>
         </div>
       </Card>}
 
@@ -1754,7 +1754,7 @@ function AppInner({ isAdmin, onLogout }) {
         <input placeholder="🔍 Пошук матеріалу..." value={stockSearch} onChange={e => setStockSearch(e.target.value)} style={{ marginBottom: 10 }} />
 
         {filteredMats.map(m => {
-          const inPrep = prepItems.filter(p => p.matId === m.id && p.status !== 'returned').reduce((s, p) => +(s + p.qty - p.returnedQty).toFixed(4), 0)
+          const inPrep = prepItems.filter(p => p.matId === m.id && p.status !== 'returned').reduce((s, p) => +(s + p.qty - p.returnedQty).toFixed(2), 0)
           return <div key={m.id} style={{ background: G.card, border: `1px solid ${G.b1}`, borderRadius: 12, padding: 12, marginBottom: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
               <div style={{ flex: 1, display: 'flex', gap: 10 }}>
@@ -2295,9 +2295,9 @@ function AppInner({ isAdmin, onLogout }) {
                   if (rem <= 0) return
                   const avail = p.qty - p.returnedQty
                   const use = Math.min(avail, rem)
-                  p.returnedQty = +(p.returnedQty + use).toFixed(4)
+                  p.returnedQty = +(p.returnedQty + use).toFixed(2)
                   p.status = p.returnedQty >= p.qty ? 'returned' : 'partial'
-                  rem = +(rem - use).toFixed(4)
+                  rem = +(rem - use).toFixed(2)
                 })
               }
               doDeduct(false, c.fromPersonal)
@@ -2433,7 +2433,7 @@ function AppInner({ isAdmin, onLogout }) {
 
                 const canFulfill = (id, q) => {
                   const m = globalMat(id)
-                  const oh = prepItems.filter(p => p.matId == id && (p.workerId === compWorker || p.scope === 'all') && p.status !== 'returned').reduce((s, p) => +(s + p.qty - p.returnedQty).toFixed(4), 0)
+                  const oh = prepItems.filter(p => p.matId == id && (p.workerId === compWorker || p.scope === 'all') && p.status !== 'returned').reduce((s, p) => +(s + p.qty - p.returnedQty).toFixed(2), 0)
                   const st = m?.stock || 0
                   if (oh + st >= q) return true
                   const r = assemblies.find(a => a.outputMatId == id && a.outputQty > 0 && a.components?.length > 0)
@@ -2450,8 +2450,8 @@ function AppInner({ isAdmin, onLogout }) {
                   // Calculate availability on hand for this worker
                   const onHand = prepItems
                     .filter(p => (p.matId == mId) && (p.workerId === compWorker || p.scope === 'all') && p.status !== 'returned')
-                    .reduce((sum, p) => +(sum + p.qty - p.returnedQty).toFixed(4), 0)
-                  const totalAvail = +(onHand + mStock).toFixed(4)
+                    .reduce((sum, p) => +(sum + p.qty - p.returnedQty).toFixed(2), 0)
+                  const totalAvail = +(onHand + mStock).toFixed(2)
                   
                   const ok = !checked || !need || totalAvail >= need || canFulfill(mId, need)
 
@@ -2659,7 +2659,7 @@ function AppInner({ isAdmin, onLogout }) {
       const merged = []
       totalDeficits.forEach(d => {
         const ex = merged.find(m => m.matId == d.matId)
-        if (ex) ex.q = +(ex.q + d.q).toFixed(4)
+        if (ex) ex.q = +(ex.q + d.q).toFixed(2)
         else merged.push({ ...d })
       })
 
@@ -2725,7 +2725,7 @@ function AppInner({ isAdmin, onLogout }) {
             
             // Сануємо екстремальні від'ємні значення (ймовірна корупція даних або ID замість стоку)
             const safeStock = (gm.stock < -1000000) ? 0 : (gm.stock || 0)
-            const deficit = Math.max(0, +(q - safeStock).toFixed(4))
+            const deficit = Math.max(0, +(q - safeStock).toFixed(2))
             if (deficit <= 0) return []
             
             const a = assemblies.find(as => String(as.outputMatId) === String(mId))
@@ -2741,7 +2741,7 @@ function AppInner({ isAdmin, onLogout }) {
           const merged = []
           flattened.forEach(f => {
             const ex = merged.find(m => m.matId == f.matId)
-            if (ex) ex.q = +(ex.q + f.q).toFixed(4)
+            if (ex) ex.q = +(ex.q + f.q).toFixed(2)
             else merged.push({ ...f })
           })
 
@@ -2922,7 +2922,7 @@ function AppInner({ isAdmin, onLogout }) {
       const merged = []
       rawReqs.forEach(r => {
         const ex = merged.find(m => m.matId == r.matId)
-        if (ex) ex.q = +(ex.q + r.q).toFixed(4)
+        if (ex) ex.q = +(ex.q + r.q).toFixed(2)
         else merged.push({ ...r })
       })
 
@@ -2979,7 +2979,7 @@ function AppInner({ isAdmin, onLogout }) {
           const merged = []
           rawReqs.forEach(r => {
             const ex = merged.find(m => m.matId == r.matId)
-            if (ex) ex.q = +(ex.q + r.q).toFixed(4)
+            if (ex) ex.q = +(ex.q + r.q).toFixed(2)
             else merged.push({ ...r })
           })
 

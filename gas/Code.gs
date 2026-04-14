@@ -618,7 +618,7 @@ function updateMaterialStock(a, b, c) {
         if (Math.abs(delta) > 1000000) {
           return { ok: false, error: 'Suspicious stock delta: ' + delta }
         }
-        var newVal = +((+data[i][3] || 0) + delta).toFixed(4)
+        var newVal = +((+data[i][3] || 0) + delta).toFixed(2)
         sh.getRange(i + 1, 4).setValue(newVal)
         return { ok: true, stock: newVal }
       }
@@ -744,7 +744,7 @@ function writeOff(entry) {
             console.warn('Suspicious write-off amount: ' + fromStock)
             break
           }
-          var nv  = +(cur - fromStock).toFixed(4)
+          var nv  = +(cur - fromStock).toFixed(2)
           matSh.getRange(i + 1, 4).setValue(nv)
           matData[i][3] = nv
           break
@@ -798,13 +798,13 @@ function deductPrep(ss, workerName, typeId, matId, needed) {
       }
       var qty   = +data[i][7] || 0
       var ret   = +data[i][8] || 0
-      var avail = +(qty - ret).toFixed(4)
+      var avail = +(qty - ret).toFixed(2)
       if (avail <= 0) continue
       var use    = Math.min(avail, rem)
-      var newRet = +(ret + use).toFixed(4)
+      var newRet = +(ret + use).toFixed(2)
       sh.getRange(i + 1, 9).setValue(newRet)
       sh.getRange(i + 1, 12).setValue(newRet >= qty ? 'returned' : 'partial')
-      rem = +(rem - use).toFixed(4)
+      rem = +(rem - use).toFixed(2)
     }
   }
 }
@@ -823,13 +823,13 @@ function deductPrepByWorkerId(ss, workerId, typeId, matId, needed) {
       if (scope !== 'all' && String(data[i][1]) !== String(workerId)) continue
       var qty   = +data[i][7] || 0
       var ret   = +data[i][8] || 0
-      var avail = +(qty - ret).toFixed(4)
+      var avail = +(qty - ret).toFixed(2)
       if (avail <= 0) continue
       var use    = Math.min(avail, rem)
-      var newRet = +(ret + use).toFixed(4)
+      var newRet = +(ret + use).toFixed(2)
       sh.getRange(i + 1, 9).setValue(newRet)
       sh.getRange(i + 1, 12).setValue(newRet >= qty ? 'returned' : 'partial')
-      rem = +(rem - use).toFixed(4)
+      rem = +(rem - use).toFixed(2)
     }
   }
 }
@@ -849,7 +849,7 @@ function addPrepItem(item) {
       if (String(matData[i][0]) === String(item.matId)) {
         var cur = +matData[i][3] || 0
         if (cur < item.qty) return { ok: false, error: 'Не вистачає матеріалу на складі' }
-        matSh.getRange(i + 1, 4).setValue(+(cur - item.qty).toFixed(4))
+        matSh.getRange(i + 1, 4).setValue(+(cur - item.qty).toFixed(2))
         break
       }
     }
@@ -902,7 +902,7 @@ function addPrepItemsBatch(items) {
       for (var r = 1; r < matData.length; r++) {
         if (String(matData[r][0]) === String(it.matId)) {
           var cur = +matData[r][3] || 0
-          var nv = +(cur - it.qty).toFixed(4)
+          var nv = +(cur - it.qty).toFixed(2)
           matSh.getRange(r + 1, 4).setValue(nv)
           matData[r][3] = nv
           break
@@ -956,10 +956,10 @@ function returnPrep(prepId, returnQty) {
       if (String(data[i][0]) !== String(prepId)) continue
       var qty   = +data[i][7] || 0
       var ret   = +data[i][8] || 0
-      var avail = +(qty - ret).toFixed(4)
+      var avail = +(qty - ret).toFixed(2)
       if (returnQty > avail + 0.0001) return { ok: false, error: 'Більше ніж є на руках' }
 
-      var newRet = +(ret + returnQty).toFixed(4)
+      var newRet = +(ret + returnQty).toFixed(2)
       sh.getRange(i + 1, 9).setValue(newRet)
       sh.getRange(i + 1, 12).setValue(newRet >= qty ? 'returned' : 'partial')
 
@@ -968,7 +968,7 @@ function returnPrep(prepId, returnQty) {
       var matData = matSh.getDataRange().getValues()
       for (var j = 1; j < matData.length; j++) {
         if (String(matData[j][0]) === matId) {
-          matSh.getRange(j + 1, 4).setValue(+(+matData[j][3] + returnQty).toFixed(4))
+          matSh.getRange(j + 1, 4).setValue(+(+matData[j][3] + returnQty).toFixed(2))
           break
         }
       }
@@ -1019,7 +1019,7 @@ function addRepair(entry) {
           for (var i = 1; i < matData.length; i++) {
             if (String(matData[i][0]) === String(c.matId)) {
               var cur = +matData[i][3] || 0
-              var nv  = Math.max(0, +(cur - c.fromStock).toFixed(4))
+              var nv  = Math.max(0, +(cur - c.fromStock).toFixed(2))
               matSh.getRange(i + 1, 4).setValue(nv)
               matData[i][3] = nv
               break
@@ -1039,28 +1039,28 @@ function addRepair(entry) {
             var rowRetQty = num(prepData[p][8])
 
             if (rowStatus !== 'returned' && rowMatId === String(c.matId)) {
-              var avail = +(rowQty - rowRetQty).toFixed(4)
+              var avail = +(rowQty - rowRetQty).toFixed(2)
               if (avail <= 0) continue
 
               if (personalNeed > 0 && rowWorkerId === String(entry.workerId) && rowScope !== 'all') {
                 var use = Math.min(avail, personalNeed)
-                var newRetQty = +(rowRetQty + use).toFixed(4)
+                var newRetQty = +(rowRetQty + use).toFixed(2)
                 prepSh.getRange(p+1, 9).setValue(newRetQty)
                 var newStatus = newRetQty >= rowQty ? 'returned' : 'partial'
                 prepSh.getRange(p+1, 12).setValue(newStatus)
                 prepData[p][8] = newRetQty; prepData[p][11] = newStatus
-                personalNeed = +(personalNeed - use).toFixed(4)
-                avail = +(avail - use).toFixed(4)
+                personalNeed = +(personalNeed - use).toFixed(2)
+                avail = +(avail - use).toFixed(2)
               }
 
               if (teamNeed > 0 && rowScope === 'all') {
                 var use = Math.min(avail, teamNeed)
-                var newRetQty = +(rowRetQty + use).toFixed(4)
+                var newRetQty = +(rowRetQty + use).toFixed(2)
                 prepSh.getRange(p+1, 9).setValue(newRetQty)
                 var newStatus = newRetQty >= rowQty ? 'returned' : 'partial'
                 prepSh.getRange(p+1, 12).setValue(newStatus)
                 prepData[p][8] = newRetQty; prepData[p][11] = newStatus
-                teamNeed = +(teamNeed - use).toFixed(4)
+                teamNeed = +(teamNeed - use).toFixed(2)
               }
             }
           }
@@ -1074,7 +1074,7 @@ function addRepair(entry) {
         for (var i = 1; i < matData.length; i++) {
           if (String(matData[i][0]) === String(m.matId)) {
             var cur = +matData[i][3] || 0
-            var nv  = Math.max(0, +(cur - m.qty).toFixed(4))
+            var nv  = Math.max(0, +(cur - m.qty).toFixed(2))
             matSh.getRange(i + 1, 4).setValue(nv)
             matData[i][3] = nv
             consumedLog.push({ matId: m.matId, name: m.matName, unit: m.unit, amount: m.qty })
@@ -1124,7 +1124,7 @@ function returnRepairMaterials(repairId, matIds) {
         if (matIds && matIds.indexOf(m.matId) < 0) return
         for (var j = 1; j < matData.length; j++) {
           if (String(matData[j][0]) === String(m.matId)) {
-            matSh.getRange(j + 1, 4).setValue(+(+matData[j][3] + m.qty).toFixed(4))
+            matSh.getRange(j + 1, 4).setValue(+(+matData[j][3] + m.qty).toFixed(2))
             break
           }
         }
@@ -1543,7 +1543,7 @@ function produceAssembly(entry) {
     var consumed = []
     for (var k=0; k<components.length; k++) {
       var comp    = components[k]
-      var need    = +(comp.qty * totalQty).toFixed(4)
+      var need    = +(comp.qty * totalQty).toFixed(2)
       var matName = ''
       var matUnit = ''
       var hasStock = false
@@ -1567,7 +1567,7 @@ function produceAssembly(entry) {
     consumed.forEach(function(c) {
       for (var m=1; m<matData.length; m++) {
         if (String(matData[m][0])===String(c.matId)) {
-          var nv = Math.max(0, +(num(matData[m][3]) - c.amount).toFixed(4))
+          var nv = Math.max(0, +(num(matData[m][3]) - c.amount).toFixed(2))
           matSh.getRange(m+1, 4).setValue(nv)
           matData[m][3] = nv
           break
@@ -1576,10 +1576,10 @@ function produceAssembly(entry) {
     })
 
     // Додаємо готові збірки на склад (outputQty * qty штук)
-    var outputAmt = +(asm.outputQty * totalQty).toFixed(4)
+    var outputAmt = +(asm.outputQty * totalQty).toFixed(2)
     for (var m=1; m<matData.length; m++) {
       if (String(matData[m][0])===String(asm.outputMatId)) {
-        var newStock = +(num(matData[m][3]) + outputAmt).toFixed(4)
+        var newStock = +(num(matData[m][3]) + outputAmt).toFixed(2)
         matSh.getRange(m+1, 4).setValue(newStock)
         matData[m][3] = newStock
         break
@@ -1631,7 +1631,7 @@ function produceAssemblyAdvanced(entry) {
       if (c.fromStock > 0) {
         for (var m=1; m<matData.length; m++) {
           if (String(matData[m][0]) === String(c.matId)) {
-            var nv = Math.max(0, +(num(matData[m][3]) - c.fromStock).toFixed(4))
+            var nv = Math.max(0, +(num(matData[m][3]) - c.fromStock).toFixed(2))
             matSh.getRange(m+1, 4).setValue(nv)
             matData[m][3] = nv
             break
@@ -1655,32 +1655,32 @@ function produceAssemblyAdvanced(entry) {
            var rowRetQty = num(prepData[p][8])
 
            if (rowStatus !== 'returned' && rowMatId === String(c.matId)) {
-              var avail = +(rowQty - rowRetQty).toFixed(4)
+              var avail = +(rowQty - rowRetQty).toFixed(2)
               if (avail <= 0) continue
 
               if (personalNeed > 0 && rowWorkerId === String(entry.workerId) && rowScope !== 'all') {
                   var use = Math.min(avail, personalNeed)
-                  var newRetQty = +(rowRetQty + use).toFixed(4)
+                  var newRetQty = +(rowRetQty + use).toFixed(2)
                   prepSh.getRange(p+1, 9).setValue(newRetQty)
                   var newStatus = newRetQty >= rowQty ? 'returned' : 'partial'
                   prepSh.getRange(p+1, 12).setValue(newStatus)
                   
                   prepData[p][8] = newRetQty
                   prepData[p][11] = newStatus
-                  personalNeed = +(personalNeed - use).toFixed(4)
-                  avail = +(avail - use).toFixed(4) // if needed for teamNeed fallback, though it's distinct scope
+                  personalNeed = +(personalNeed - use).toFixed(2)
+                  avail = +(avail - use).toFixed(2) // if needed for teamNeed fallback, though it's distinct scope
               }
 
               if (teamNeed > 0 && rowScope === 'all') {
                   var use = Math.min(avail, teamNeed)
-                  var newRetQty = +(rowRetQty + use).toFixed(4)
+                  var newRetQty = +(rowRetQty + use).toFixed(2)
                   prepSh.getRange(p+1, 9).setValue(newRetQty)
                   var newStatus = newRetQty >= rowQty ? 'returned' : 'partial'
                   prepSh.getRange(p+1, 12).setValue(newStatus)
                   
                   prepData[p][8] = newRetQty
                   prepData[p][11] = newStatus
-                  teamNeed = +(teamNeed - use).toFixed(4)
+                  teamNeed = +(teamNeed - use).toFixed(2)
               }
            }
         }
@@ -1694,7 +1694,7 @@ function produceAssemblyAdvanced(entry) {
       // На глобальний склад
       for (var m=1; m<matData.length; m++) {
         if (String(matData[m][0]) === String(asm.outputMatId)) {
-          var newStock = +(num(matData[m][3]) + outputAmt).toFixed(4)
+          var newStock = +(num(matData[m][3]) + outputAmt).toFixed(2)
           matSh.getRange(m+1, 4).setValue(newStock)
           matData[m][3] = newStock
           break
@@ -1795,7 +1795,7 @@ function updateRepairStatus(repairId, status, dateCompleted, workerName, materia
         for (var j = 1; j < matData.length; j++) {
           if (String(matData[j][0]) === String(m.matId)) {
             var cur = +matData[j][3] || 0
-            var nv  = Math.max(0, +(cur - fromStock).toFixed(4))
+            var nv  = Math.max(0, +(cur - fromStock).toFixed(2))
             matSh.getRange(j + 1, 4).setValue(nv)
             matData[j][3] = nv
             consumed.push({ matId: m.matId, name: m.name, unit: m.unit, amount: fromStock })
@@ -1984,7 +1984,7 @@ function getBackupDiff() {
     var current = parseFloat(r[stockIdx]) || 0
     var bak = bakMap[matId]
     var backup = bak ? bak.stock : null
-    var diff = backup !== null ? +(current - backup).toFixed(4) : null
+    var diff = backup !== null ? +(current - backup).toFixed(2) : null
     return { matId, name: String(r[nameIdx]), unit: String(r[unitIdx]), current, backup, diff }
   })
 
