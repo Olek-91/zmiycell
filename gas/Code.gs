@@ -4,6 +4,9 @@
 //  Vercel + проксі (api/gas.js)
 //  GET: ?action=назваФункції&params=[...]
 //
+//  APP VERSION: 1.8-calc-safeguards
+var APP_VERSION = "1.8-calc-safeguards";
+
 //  НОВА АРХІТЕКТУРА СКЛАДУ:
 //  Materials    — глобальний склад: id, name, unit, stock, photoUrl, isOrdered, shopUrl, minStock
 //  TypeMaterials — конфігурація типу: id, typeId, matId, perBattery, minStock
@@ -542,7 +545,7 @@ function loadAll() {
     radioStations: rows(ss, SHEET.RADIO).map(function(r) {
       return { id: r.id, name: r.name, url: r.url }
     }),
-    version: 'RADIO_READY_1.1'
+    version: APP_VERSION
   }
 }
 
@@ -611,6 +614,10 @@ function updateMaterialStock(a, b, c) {
     var data = sh.getDataRange().getValues()
     for (var i = 1; i < data.length; i++) {
       if (String(data[i][0]) === String(matId)) {
+        // Захист від критичних помилок (ID замість кількості)
+        if (Math.abs(delta) > 1000000) {
+          return { ok: false, error: 'Suspicious stock delta: ' + delta }
+        }
         var newVal = +((+data[i][3] || 0) + delta).toFixed(4)
         sh.getRange(i + 1, 4).setValue(newVal)
         return { ok: true, stock: newVal }
@@ -732,6 +739,11 @@ function writeOff(entry) {
       for (var i = 1; i < matData.length; i++) {
         if (String(matData[i][0]) === String(c.matId)) {
           var cur = +matData[i][3] || 0
+          // Захист від змішування ID та кількості
+          if (fromStock > 1000000) {
+            console.warn('Suspicious write-off amount: ' + fromStock)
+            break
+          }
           var nv  = +(cur - fromStock).toFixed(4)
           matSh.getRange(i + 1, 4).setValue(nv)
           matData[i][3] = nv

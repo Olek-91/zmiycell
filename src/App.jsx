@@ -563,7 +563,7 @@ function AppInner({ isAdmin, onLogout }) {
   // ── З'єднання з Zustand ──────────────────────────────────────
   const {
     materials, typeMaterials, assemblies, batteryTypes, workers, tools, log, repairLog, prepItems, payments, toolLog,
-    sync, loadAll, refresh, playback, radioStations,
+    sync, loadAll, refresh, playback, radioStations, backendVersion,
     setMaterials, setTypeMaterials, setAssemblies, setBatteryTypes, setWorkers, setLog, setPrepItems, setPayments, setTools, setToolLog, setRepairLog, setRadioStations, setPlayback, setSync
   } = useStore()
 
@@ -605,6 +605,7 @@ function AppInner({ isAdmin, onLogout }) {
     ['repair', '🔧', 'РЕМОНТ'],
     ['log', '📋', 'ЖУРНАЛ'],
     ['stock', '📦', 'СКЛАД'],
+    ['calculator', '🧮', 'КАЛЬК.'],
     ['shopping', '🛒', 'ЗАКУПІВЛЯ'],
     ['workers', '👷', 'КОМАНДА'],
     ['tools', '🛠', 'ІНСТР.'],
@@ -618,6 +619,7 @@ function AppInner({ isAdmin, onLogout }) {
     ['repair', '🔧', 'РЕМОНТ'],
     ['log', '📋', 'ЖУРНАЛ'],
     ['stock', '📦', 'СКЛАД'],
+    ['calculator', '🧮', 'КАЛЬК.'],
     ['tools', '🛠', 'ІНСТР.'],
     ['manual', '📖', 'МАНУАЛ'],
     ['radio', '📻', 'РАДІО'],
@@ -650,6 +652,9 @@ function AppInner({ isAdmin, onLogout }) {
   // PageShopping — калькулятор виробництва
   const [calcTypeId, setCalcTypeId] = useState('')
   const [calcQty, setCalcQty] = useState('10')
+  const [calcPureTypeId, setCalcPureTypeId] = useState('')
+  const [calcPureQty, setCalcPureQty] = useState('10')
+  const [backendVersion, setBackendVersion] = useState('loading...')
 
 
   // ── UI стан ──────────────────────────────────────────────
@@ -837,8 +842,10 @@ function AppInner({ isAdmin, onLogout }) {
           if (nestedSubs) {
             allSubs.push(...nestedSubs)
           } else {
-            // Реальний дефіцит компонента
-            allSubs.push({ matId: ac.matId, name: cgm.name, unit: cgm.unit, amount: nestedDeficit, fromPersonal: 0, fromTeam: 0, fromStock: nestedDeficit, totalStock: stock, isSubstitute: true, substituteFor: parentName })
+            // Реальний дефіцит компонента (сануємо екстремальні від'ємні значення)
+            const safeStock = stock < -1000000 ? 0 : stock
+            const safeDeficit = Math.max(0, +(compAmt - fromPersonal - safeStock).toFixed(4))
+            allSubs.push({ matId: ac.matId, name: cgm.name, unit: cgm.unit, amount: safeDeficit, fromPersonal: 0, fromTeam: 0, fromStock: safeDeficit, totalStock: stock, isSubstitute: true, substituteFor: parentName })
           }
         }
       })
@@ -904,16 +911,26 @@ function AppInner({ isAdmin, onLogout }) {
 
   const buildAssemblyConsumed = useCallback((assembly, workerId, qty) => {
     if (!assembly) return []
-
-    // For assemblies, we consider prep items that are for 'ALL' types, since assemblies aren't tied to a specific battery type yet.
-    // Except if the user specifically issued prep items for a specific battery type, we might want to allow using them, 
-    // but for simplicity, we look for any prep item for this material for this worker.
     const myPrep = prepItems.filter(p => p.workerId == workerId && p.scope !== 'all' && p.status !== 'returned')
     const allPrep = prepItems.filter(p => p.scope === 'all' && p.status !== 'returned')
 
-    return assembly.components.map(ac => {
+    const map = new Map()
+    const addOrUpdate = (item) => {
+      const id = String(item.matId)
+      const ex = map.get(id)
+      if (ex) {
+        ex.amount = +(ex.amount + item.amount).toFixed(4)
+        ex.fromPersonal = +(ex.fromPersonal + item.fromPersonal).toFixed(4)
+        ex.fromTeam = +(ex.fromTeam + item.fromTeam).toFixed(4)
+        ex.fromStock = +(ex.fromStock + item.fromStock).toFixed(4)
+      } else {
+        map.set(id, { ...item })
+      }
+    }
+
+    assembly.components.forEach(ac => {
       const gm = globalMat(ac.matId)
-      if (!gm) return null
+      if (!gm) return
       let need = +(ac.qty * qty).toFixed(4)
       const needOrig = need
       const pAvail = myPrep.filter(p => p.matId === ac.matId).reduce((s, p) => +(s + p.qty - p.returnedQty).toFixed(4), 0)
@@ -922,9 +939,24 @@ function AppInner({ isAdmin, onLogout }) {
       const aAvail = allPrep.filter(p => p.matId === ac.matId).reduce((s, p) => +(s + p.qty - p.returnedQty).toFixed(4), 0)
       const fromTeam = +Math.min(aAvail, need).toFixed(4)
       need = +(need - fromTeam).toFixed(4)
-      return { matId: ac.matId, name: gm.name, unit: gm.unit, amount: needOrig, fromPersonal, fromTeam, fromStock: need, totalStock: gm.stock }
-    }).filter(Boolean)
-  }, [prepItems, materials])
+
+      const fromStockDirect = +Math.min(gm.stock, need).toFixed(4)
+      const deficit = +(need - fromStockDirect).toFixed(4)
+
+      if (deficit > 0) {
+        const subs = expandAssemblyFallback(ac.matId, deficit, gm.name, workerId, 'ALL')
+        if (subs) {
+          subs.forEach(addOrUpdate)
+          addOrUpdate({ matId: ac.matId, name: gm.name, unit: gm.unit, amount: needOrig, fromPersonal, fromTeam, fromStock: fromStockDirect, totalStock: gm.stock })
+        } else {
+          addOrUpdate({ matId: ac.matId, name: gm.name, unit: gm.unit, amount: needOrig, fromPersonal, fromTeam, fromStock: need, totalStock: gm.stock })
+        }
+      } else {
+        addOrUpdate({ matId: ac.matId, name: gm.name, unit: gm.unit, amount: needOrig, fromPersonal, fromTeam, fromStock: fromStockDirect, totalStock: gm.stock })
+      }
+    })
+    return Array.from(map.values())
+  }, [prepItems, materials, expandAssemblyFallback])
 
   const buildRepairConsumed = useCallback((repairMaterials, workerId, typeId) => {
     if (!repairMaterials || repairMaterials.length === 0) return []
@@ -969,7 +1001,15 @@ function AppInner({ isAdmin, onLogout }) {
 
   // ── Хелпер оновлення глобального stock ───────────────────
   const updateGlobalStock = useCallback((matId, delta) => {
-    setMaterials(prev => prev.map(m => m.id != matId ? m : { ...m, stock: Math.max(0, +(m.stock + delta).toFixed(4)) }))
+    setMaterials(prev => prev.map(m => {
+      if (m.id != matId) return m
+      // Захист від змішування ID та кількості (delta не може бути подібна до таймстемпу)
+      if (Math.abs(delta) > 100000000) {
+        console.warn('Suspicious stock update rejected:', delta)
+        return m
+      }
+      return { ...m, stock: Math.max(-10000, +(m.stock + delta).toFixed(4)) }
+    }))
   }, [])
   // ════════════════════════════════════════════════════════
   //  ACTIONS
@@ -1733,6 +1773,20 @@ function AppInner({ isAdmin, onLogout }) {
             <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
               <StockBadge m={m} />
               <span onClick={() => editStock(m)} style={{ background: G.card2, border: `1px solid ${G.b1}`, borderRadius: 6, padding: '2px 8px', fontSize: 12, color: G.cy, cursor: 'pointer' }}>{m.stock} {m.unit}</span>
+              {m.stock < -1000000 && (
+                <button 
+                  onClick={async () => { 
+                    if (window.confirm("Скинути цей некоректний залишок до 0?")) {
+                      await api('updateMaterialField', [m.id, 'stock', 0]); 
+                      setMaterials(prev => prev.map(mx => mx.id !== m.id ? mx : { ...mx, stock: 0 }));
+                      showToast('✓ Обнулено');
+                    }
+                  }} 
+                  style={{ background: G.rd, color: '#fff', border: 'none', borderRadius: 6, padding: '2px 8px', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Скинути в 0
+                </button>
+              )}
               <span onClick={() => editField(m, 'minStock')} style={{ fontSize: 11, color: G.t2, cursor: 'pointer' }}>мін:{m.minStock}</span>
               {inPrep > 0 && <Chip bg='#2e1065' color='#c084fc' bd='#4c1d95'>📦{inPrep}</Chip>}
             </div>
@@ -2670,10 +2724,11 @@ function AppInner({ isAdmin, onLogout }) {
             const gm = materials.find(m => String(m.id) === String(mId))
             if (!gm) return []
             
-            const inStock = gm.stock || 0
-            const deficit = Math.max(0, q - inStock)
+            // Сануємо екстремальні від'ємні значення (ймовірна корупція даних або ID замість стоку)
+            const safeStock = (gm.stock < -1000000) ? 0 : (gm.stock || 0)
+            const deficit = Math.max(0, +(q - safeStock).toFixed(4))
             if (deficit <= 0) return []
-
+            
             const a = assemblies.find(as => String(as.outputMatId) === String(mId))
             if (a && forceExplode) {
               const factor = deficit / a.outputQty
@@ -2776,6 +2831,7 @@ function AppInner({ isAdmin, onLogout }) {
   const PageWorkers = () => {
     const newName = newWorkerName; const setNewName = setNewWorkerName
     const realWorkers = workers
+    }
 
     const deleteWorker = (w) => openConfirm('Видалити працівника?', <b style={{ color: G.rd }}>{w.name}</b>, () => {
       closeModal()
@@ -2843,6 +2899,113 @@ function AppInner({ isAdmin, onLogout }) {
           <button onClick={addWorker} style={{ padding: '8px 16px', background: G.gn, color: '#000', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>+ ДОДАТИ</button>
         </div>
       </Card>}
+    </>)
+  }
+
+  const PageCalculator = () => {
+    const sendPureCalcToTg = async () => {
+      const qty = parseFloat(calcPureQty) || 0
+      if (!calcPureTypeId || !qty) return
+      const tms = typeMaterials.filter(tm => tm.typeId == calcPureTypeId)
+      if (tms.length === 0) return
+
+      const getRawRecursive = (mId, q) => {
+        const gm = materials.find(m => String(m.id) === String(mId))
+        if (!gm) return []
+        const a = assemblies.find(as => String(as.outputMatId) === String(mId))
+        if (a) {
+          const factor = q / a.outputQty
+          return a.components.flatMap(ac => getRawRecursive(ac.matId, ac.qty * factor))
+        }
+        return [{ matId: mId, q }]
+      }
+
+      const rawReqs = tms.flatMap(tm => getRawRecursive(tm.matId, tm.perBattery * qty))
+      const merged = []
+      rawReqs.forEach(r => {
+        const ex = merged.find(m => m.matId == r.matId)
+        if (ex) ex.q = +(ex.q + r.q).toFixed(4)
+        else merged.push({ ...r })
+      })
+
+      const lines = merged.map(n => {
+        const gm = materials.find(m => m.id == n.matId)
+        if (!gm) return null
+        return `• ${gm.name}: ${n.q} ${gm.unit}`
+      }).filter(Boolean)
+
+      const typeName = batteryTypes.find(t => t.id == calcPureTypeId)?.name || '?'
+      const msg = `🧮 ZmiyCell — Розрахунок потреби\n\nДля виготовлення ${qty} шт. "${typeName}" необхідно:\n\n${lines.join('\n')}`
+      await sendTelegram(msg)
+      showToast('✓ Відправлено в Telegram')
+    }
+
+    return wrap(<>
+      <Card>
+        <CardTitle color={G.cy}>🧮 РОЗРАХУНОК ПОТРЕБИ</CardTitle>
+        <div style={{ color: G.t2, fontSize: 12, marginBottom: 12 }}>
+          Повний розрахунок сировини без врахування складу.
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, marginBottom: 12 }}>
+          <div>
+            <Label>ТИП АКУМУЛЯТОРА</Label>
+            <select value={calcPureTypeId} onChange={e => setCalcPureTypeId(e.target.value)}>
+              <option value="">-- Оберіть тип --</option>
+              {batteryTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <Label>КІЛЬКІСТЬ</Label>
+            <input type="number" min="1" value={calcPureQty} onChange={e => setCalcPureQty(e.target.value)} style={{ width: 80, textAlign: 'center' }} />
+          </div>
+        </div>
+
+        {(() => {
+          const qty = parseFloat(calcPureQty) || 0
+          if (!calcPureTypeId || !qty) return <div style={{ color: G.t2, fontSize: 12, textAlign: 'center', padding: '16px 0' }}>Оберіть тип і кількість</div>
+          const tms = typeMaterials.filter(tm => tm.typeId == calcPureTypeId)
+          if (tms.length === 0) return <div style={{ color: G.yw, fontSize: 12, textAlign: 'center', padding: '16px 0' }}>⚠ Матеріали не налаштовані</div>
+
+          const getRawRecursive = (mId, q) => {
+            const gm = materials.find(m => String(m.id) === String(mId))
+            if (!gm) return []
+            const a = assemblies.find(as => String(as.outputMatId) === String(mId))
+            if (a) {
+              const factor = q / a.outputQty
+              return a.components.flatMap(ac => getRawRecursive(ac.matId, ac.qty * factor))
+            }
+            return [{ matId: mId, q }]
+          }
+
+          const rawReqs = tms.flatMap(tm => getRawRecursive(tm.matId, tm.perBattery * qty))
+          const merged = []
+          rawReqs.forEach(r => {
+            const ex = merged.find(m => m.matId == r.matId)
+            if (ex) ex.q = +(ex.q + r.q).toFixed(4)
+            else merged.push({ ...r })
+          })
+
+          return <>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 4, fontSize: 11, color: G.t2, fontWeight: 700, padding: '0 4px 6px', borderBottom: `1px solid ${G.b1}` }}>
+              <span>СИРОВИНА ТА МАТЕРІАЛИ</span>
+              <span style={{ textAlign: 'right' }}>УСЬОГО</span>
+            </div>
+            <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+              {merged.map(r => {
+                const gm = materials.find(m => m.id == r.matId)
+                if (!gm) return null
+                return <div key={r.matId} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, padding: '10px 4px', borderBottom: `1px solid ${G.b1}`, fontSize: 13 }}>
+                  <span style={{ color: G.t1 }}>{gm.name}</span>
+                  <span style={{ textAlign: 'right', fontWeight: 700, color: G.cy }}>{r.q} <span style={{ color: G.t2, fontWeight: 400, fontSize: 11 }}>{gm.unit}</span></span>
+                </div>
+              })}
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <SubmitBtn color={G.gn} onClick={sendPureCalcToTg}>✈ НАДІСЛАТИ В TELEGRAM</SubmitBtn>
+            </div>
+          </>
+        })()}
+      </Card>
     </>)
   }
 
@@ -3220,6 +3383,7 @@ function AppInner({ isAdmin, onLogout }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Logo ref={headerLogoRef} size={30} />
           <span style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 26, fontWeight: 800, letterSpacing: 2 }}>ZmiyCell</span>
+          <span style={{ fontSize: 9, color: G.t2, alignSelf: 'flex-end', marginBottom: 6, marginLeft: -4, opacity: 0.7 }}>{backendVersion}</span>
           {isAdmin && <Chip bg='#1c1107' color={G.or} bd={G.b2} style={{ fontSize: 10 }}>АДМІН</Chip>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -3272,6 +3436,7 @@ function AppInner({ isAdmin, onLogout }) {
         <Route path="/" element={<Navigate to="/prod" replace />} />
         <Route path="/prod" element={PageProd()} />
         <Route path="/stock" element={PageStock()} />
+        <Route path="/calculator" element={PageCalculator()} />
         <Route path="/repair" element={PageRepair()} />
         <Route path="/shopping" element={PageShopping()} />
         <Route path="/workers" element={PageWorkers()} />

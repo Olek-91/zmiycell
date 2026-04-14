@@ -15,6 +15,7 @@ export const useStore = create((set, get) => ({
   repairLog: [],
   radioStations: [],
   playback: { isPlaying: false, stationIndex: 0 },
+  backendVersion: '...',
   
   sync: 'loading',
   
@@ -35,6 +36,7 @@ export const useStore = create((set, get) => ({
         toolLog: resp.toolLog || [],
         repairLog: resp.repairLog || [],
         radioStations: resp.radioStations || [],
+        backendVersion: resp.version || '?',
         sync: 'ok'
       })
     } catch (e) {
@@ -60,6 +62,7 @@ export const useStore = create((set, get) => ({
         toolLog: resp.toolLog || [],
         repairLog: resp.repairLog || [],
         radioStations: resp.radioStations || [],
+        backendVersion: resp.version || '?',
         sync: 'ok'
       })
     } catch (e) {
