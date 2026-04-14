@@ -654,7 +654,6 @@ function AppInner({ isAdmin, onLogout }) {
   const [calcQty, setCalcQty] = useState('10')
   const [calcPureTypeId, setCalcPureTypeId] = useState('')
   const [calcPureQty, setCalcPureQty] = useState('10')
-  const [backendVersion, setBackendVersion] = useState('loading...')
 
 
   // ── UI стан ──────────────────────────────────────────────
