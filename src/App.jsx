@@ -602,43 +602,50 @@ function AppInner({ isAdmin, onLogout }) {
   const startY = useRef(0)
   const headerLogoRef = useRef(null)
 
-  // ── Навігація ─────────────────────────────────────────────
   const ALL_NAV = [
-    ['prod', '⚙', 'ВИР.'],
-    ['repair', '🔧', 'РЕМ.'],
-    ['manual', '📖', 'РУЧН.'],
-    ['stock', '📦', 'СКЛАД'],
+    ['prod',       '⚙️',  'ВИР.'],
+    ['repair',     '🔧', 'РЕМ.'],
+    ['manual',     '📖', 'РУЧН.'],
+    ['stock',      '📦', 'СКЛАД'],
     ['calculator', '🧮', 'КАЛЬК.'],
-    ['shopping', '🛒', 'ЗАКУП.'],
-    ['tools', '🛠', 'ІНСТР.'],
-    ['log', '📋', 'ЛОГ'],
-    ['actlog', '📜', 'ЖУРН.'],
-    ['backup', '💾', 'БЕКАП'],
-    ['workers', '👷', 'КОМАН.'],
-    ['radio', '📻', 'РАДІО'],
+    ['shopping',   '🛒', 'ЗАКУП.'],
+    ['tools',      '🛠', 'ІНСТР.'],
+    ['log',        '📋', 'ЛОГ'],
+    ['actlog',     '📜', 'ЖУРН.'],
+    ['backup',     '💾', 'БЕКАП'],
+    ['workers',    '👷', 'КОМАН.'],
+    ['radio',      '📻', 'РАДІО'],
   ]
   const ALL_NAV_GROUPS = [
-    ['prod', 'repair', 'manual'],
-    ['stock', 'calculator', 'shopping', 'tools'],
-    ['log', 'actlog', 'backup', 'workers', 'radio'],
+    { key: 'prod',   icon: '🔋', label: 'ВИРОБН.', keys: ['prod', 'repair', 'manual'] },
+    { key: 'stock',  icon: '📦', label: 'СКЛАД',   keys: ['stock', 'calculator', 'shopping', 'tools'] },
+    { key: 'report', icon: '📊', label: 'ЗВІТ.',   keys: ['log', 'actlog', 'backup'] },
+    { key: 'team',   icon: '👥', label: 'ІНШЕ',    keys: ['workers', 'radio'] },
   ]
   const USER_NAV = [
-    ['prod', '⚙', 'ВИР.'],
-    ['repair', '🔧', 'РЕМ.'],
-    ['manual', '📖', 'РУЧН.'],
-    ['stock', '📦', 'СКЛАД'],
+    ['prod',       '⚙️',  'ВИР.'],
+    ['repair',     '🔧', 'РЕМ.'],
+    ['manual',     '📖', 'РУЧН.'],
+    ['stock',      '📦', 'СКЛАД'],
     ['calculator', '🧮', 'КАЛЬК.'],
-    ['tools', '🛠', 'ІНСТР.'],
-    ['log', '📋', 'ЛОГ'],
-    ['radio', '📻', 'РАДІО'],
+    ['tools',      '🛠', 'ІНСТР.'],
+    ['log',        '📋', 'ЛОГ'],
+    ['radio',      '📻', 'РАДІО'],
   ]
   const USER_NAV_GROUPS = [
-    ['prod', 'repair', 'manual'],
-    ['stock', 'calculator', 'tools'],
-    ['log', 'radio'],
+    { key: 'prod',  icon: '🔋', label: 'ВИРОБН.', keys: ['prod', 'repair', 'manual'] },
+    { key: 'stock', icon: '📦', label: 'СКЛАД',   keys: ['stock', 'calculator', 'tools'] },
+    { key: 'other', icon: '📻', label: 'ІНШЕ',    keys: ['log', 'radio'] },
   ]
   const NAV = isAdmin ? ALL_NAV : USER_NAV
   const NAV_GROUPS = isAdmin ? ALL_NAV_GROUPS : USER_NAV_GROUPS
+  const activeGroupKey = (NAV_GROUPS.find(g => g.keys.includes(path))?.key) || NAV_GROUPS[0].key
+  const [openGroup, setOpenGroup] = useState(activeGroupKey)
+  const _prevNavPath = React.useRef(path)
+  if (_prevNavPath.current !== path) {
+    _prevNavPath.current = path
+    if (activeGroupKey !== openGroup) setOpenGroup(activeGroupKey)
+  }
 
   const [prodTab, setProdTab] = useState('writeoff')
   // PageAssembly стан
@@ -3422,29 +3429,59 @@ function AppInner({ isAdmin, onLogout }) {
           <BatteryIcon />
         </div>
       </div>
-      <div style={{ maxWidth: 700, width: '100%', margin: '0 auto', borderTop: `1px solid rgba(255,255,255,0.05)` }}>
-        {NAV_GROUPS.map((keys, gi) => (
-          <div key={gi} style={{ display: 'flex', borderBottom: gi < NAV_GROUPS.length - 1 ? `1px solid rgba(255,255,255,0.04)` : 'none' }}>
-            {keys.map(k => {
-              const item = NAV.find(n => n[0] === k)
-              if (!item) return null
-              const [, icon, label] = item
-              const active = path === k
-              return (
-                <button key={k} onClick={() => setPage(k)} style={{
-                  flex: '1 1 0', padding: '9px 4px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-                  background: active ? 'rgba(249,115,22,0.08)' : 'none', border: 'none',
-                  borderBottom: `2px solid ${active ? G.or : 'transparent'}`,
-                  cursor: 'pointer', color: active ? G.or : G.t2, transition: '.15s',
-                  fontFamily: "'Barlow Condensed',sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: .5, lineHeight: 1
-                }}>
-                  <span style={{ fontSize: 17 }}>{icon}</span>
-                  <span>{label}</span>
-                </button>
-              )
-            })}
-          </div>
-        ))}
+      <div style={{ maxWidth: 700, width: '100%', margin: '0 auto', borderTop: `1px solid rgba(255,255,255,0.06)` }}>
+        {/* Group header row */}
+        <div style={{ display: 'flex' }}>
+          {NAV_GROUPS.map(g => {
+            const isOpen = openGroup === g.key
+            const hasActive = g.keys.includes(path)
+            return (
+              <button key={g.key} onClick={() => setOpenGroup(isOpen ? null : g.key)} style={{
+                flex: '1 1 0', padding: '8px 4px 6px', display: 'flex', flexDirection: 'column',
+                alignItems: 'center', gap: 2, background: isOpen ? 'rgba(249,115,22,0.1)' : 'none',
+                border: 'none', borderBottom: `2px solid ${hasActive ? G.or : isOpen ? G.b2 : 'transparent'}`,
+                cursor: 'pointer', color: hasActive ? G.or : isOpen ? G.t1 : G.t2,
+                transition: '.15s', fontFamily: "'Barlow Condensed',sans-serif",
+                fontSize: 11, fontWeight: 700, letterSpacing: .5, lineHeight: 1
+              }}>
+                <span style={{ fontSize: 18 }}>{g.icon}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  {g.label}
+                  <span style={{ fontSize: 9, opacity: 0.6, marginTop: 1 }}>{isOpen ? '▲' : '▼'}</span>
+                </span>
+              </button>
+            )
+          })}
+        </div>
+        {/* Sub-tabs for open group */}
+        {openGroup && (() => {
+          const grp = NAV_GROUPS.find(g => g.key === openGroup)
+          if (!grp) return null
+          return (
+            <div style={{ display: 'flex', background: 'rgba(0,0,0,0.2)', borderBottom: `1px solid rgba(255,255,255,0.04)` }}>
+              {grp.keys.map(k => {
+                const item = NAV.find(n => n[0] === k)
+                if (!item) return null
+                const [, icon, label] = item
+                const active = path === k
+                return (
+                  <button key={k} onClick={() => setPage(k)} style={{
+                    flex: '1 1 0', padding: '8px 4px', display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', gap: 1,
+                    background: active ? 'rgba(249,115,22,0.12)' : 'none', border: 'none',
+                    borderBottom: `2px solid ${active ? G.or : 'transparent'}`,
+                    cursor: 'pointer', color: active ? G.or : G.t2, transition: '.15s',
+                    fontFamily: "'Barlow Condensed',sans-serif", fontSize: 10, fontWeight: 700,
+                    letterSpacing: .5, lineHeight: 1
+                  }}>
+                    <span style={{ fontSize: 15 }}>{icon}</span>
+                    <span>{label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )
+        })()}
       </div>
     </div>
 
