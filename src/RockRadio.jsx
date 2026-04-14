@@ -21,7 +21,6 @@ const AdFreeRockPlayer = () => {
   const [busy, setBusy] = useState(false);
   const [volume, setVolume] = useState(0.8);
   const [nowPlaying, setNowPlaying] = useState(null);
-  const audioRef = useRef(null);
   const npTimerRef = useRef(null);
 
   const stations = radioStations.length > 0 ? radioStations : [
@@ -32,10 +31,15 @@ const AdFreeRockPlayer = () => {
   const isPlaying = playback.isPlaying;
   const currentStation = stations[currentStationIndex];
 
-  // ── Audio element: sync volume ─────────────────────────────
-  useEffect(() => {
-    if (audioRef.current) audioRef.current.volume = volume;
-  }, [volume]);
+  // ── Audio element: sync volume via global ref ────────────
+  const applyVolume = useCallback((v) => {
+    const audio = window.__zcAudio;
+    if (audio) audio.volume = v;
+  }, []);
+
+  useEffect(() => { applyVolume(volume); }, [volume, applyVolume]);
+  // Re-apply when playback starts (audio element may have been recreated)
+  useEffect(() => { if (playback.isPlaying) applyVolume(volume); }, [playback.isPlaying]);
 
   // ── Now-playing RSS/JSON for Radio Paradise ────────────────
   const fetchNowPlaying = useCallback(async () => {
@@ -68,17 +72,18 @@ const AdFreeRockPlayer = () => {
 
   const prevStation = () => {
     const ni = (currentStationIndex - 1 + stations.length) % stations.length;
-    setPlayback({ stationIndex: ni, isPlaying: false });
+    // Keep playing if already playing
+    setPlayback({ stationIndex: ni, isPlaying: isPlaying });
   };
 
   const nextStation = () => {
     const ni = (currentStationIndex + 1) % stations.length;
-    setPlayback({ stationIndex: ni, isPlaying: false });
+    setPlayback({ stationIndex: ni, isPlaying: isPlaying });
   };
 
   const changeStation = (event) => {
     const ni = parseInt(event.target.value, 10);
-    setPlayback({ stationIndex: ni, isPlaying: false });
+    setPlayback({ stationIndex: ni, isPlaying: isPlaying });
   };
 
   // ── Station management ─────────────────────────────────────

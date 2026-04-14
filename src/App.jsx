@@ -568,12 +568,15 @@ function AppInner({ isAdmin, onLogout }) {
   } = useStore()
 
   const globalAudioRef = useRef(null)
+  // Expose audio ref globally so RockRadio can control volume
+  useEffect(() => { window.__zcAudio = globalAudioRef.current }, [])
 
   useEffect(() => {
     const audio = globalAudioRef.current
     if (!audio) return
     const currentUrl = radioStations[playback.stationIndex]?.url
     if (playback.isPlaying) {
+      // Always update src when station changes (even if already playing)
       if (audio.src !== currentUrl) {
         audio.src = currentUrl
         audio.load()
