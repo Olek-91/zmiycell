@@ -1665,9 +1665,7 @@ function AppInner({ isAdmin, onLogout }) {
   }
   // ── Склад ─────────────────────────────────────────────────
   const PageStock = () => {
-    const filteredMats = materials
-      .filter(m => !stockSearch || m.name.toLowerCase().includes(stockSearch.toLowerCase()))
-      .sort((a, b) => a.name.localeCompare(b.name, 'uk'))
+    const filteredMats = materials.filter(m => !stockSearch || m.name.toLowerCase().includes(stockSearch.toLowerCase()))
 
     // ── Підтаб: Матеріали (глобальний склад) ─────────────
     const TabMaterials = () => {

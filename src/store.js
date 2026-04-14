@@ -23,19 +23,21 @@ export const useStore = create((set, get) => ({
     set({ sync: 'loading' })
     try {
       const resp = await gasCall('loadAll')
+      const sortByName = (arr) => [...(arr || [])].sort((a,b) => (a.name || '').localeCompare(b.name || '', 'uk'))
+      
       set({
-        materials: resp.materials || [],
+        materials:     sortByName(resp.materials),
         typeMaterials: resp.typeMaterials || [],
-        assemblies: resp.assemblies || [],
-        batteryTypes: resp.batteryTypes || [],
-        workers: resp.workers || [],
-        log: resp.log || [],
-        prepItems: resp.prepItems || [],
-        payments: resp.payments || [],
-        tools: resp.tools || [],
-        toolLog: resp.toolLog || [],
-        repairLog: resp.repairLog || [],
-        radioStations: resp.radioStations || [],
+        assemblies:    sortByName(resp.assemblies),
+        batteryTypes:  sortByName(resp.batteryTypes),
+        workers:       sortByName(resp.workers),
+        log:           resp.log || [],
+        prepItems:     resp.prepItems || [],
+        payments:      resp.payments || [],
+        tools:         sortByName(resp.tools),
+        toolLog:       resp.toolLog || [],
+        repairLog:     resp.repairLog || [],
+        radioStations: sortByName(resp.radioStations),
         backendVersion: resp.version || '?',
         sync: 'ok'
       })
@@ -46,22 +48,23 @@ export const useStore = create((set, get) => ({
   },
 
   refresh: async () => {
-    // Silently refresh without big spinner
     try {
       const resp = await gasCall('loadAll')
+      const sortByName = (arr) => [...(arr || [])].sort((a,b) => (a.name || '').localeCompare(b.name || '', 'uk'))
+
       set({
-        materials: resp.materials || [],
+        materials:     sortByName(resp.materials),
         typeMaterials: resp.typeMaterials || [],
-        assemblies: resp.assemblies || [],
-        batteryTypes: resp.batteryTypes || [],
-        workers: resp.workers || [],
-        log: resp.log || [],
-        prepItems: resp.prepItems || [],
-        payments: resp.payments || [],
-        tools: resp.tools || [],
-        toolLog: resp.toolLog || [],
-        repairLog: resp.repairLog || [],
-        radioStations: resp.radioStations || [],
+        assemblies:    sortByName(resp.assemblies),
+        batteryTypes:  sortByName(resp.batteryTypes),
+        workers:       sortByName(resp.workers),
+        log:           resp.log || [],
+        prepItems:     resp.prepItems || [],
+        payments:      resp.payments || [],
+        tools:         sortByName(resp.tools),
+        toolLog:       resp.toolLog || [],
+        repairLog:     resp.repairLog || [],
+        radioStations: sortByName(resp.radioStations),
         backendVersion: resp.version || '?',
         sync: 'ok'
       })
