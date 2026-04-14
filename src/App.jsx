@@ -3436,7 +3436,10 @@ function AppInner({ isAdmin, onLogout }) {
             const isOpen = openGroup === g.key
             const hasActive = g.keys.includes(path)
             return (
-              <button key={g.key} onClick={() => setOpenGroup(isOpen ? null : g.key)} style={{
+              <button key={g.key} onClick={() => {
+                if (isOpen) { setOpenGroup(null) }
+                else { setOpenGroup(g.key); if (!g.keys.includes(path)) setPage(g.keys[0]) }
+              }} style={{
                 flex: '1 1 0', padding: '8px 4px 6px', display: 'flex', flexDirection: 'column',
                 alignItems: 'center', gap: 2, background: isOpen ? 'rgba(249,115,22,0.1)' : 'none',
                 border: 'none', borderBottom: `2px solid ${hasActive ? G.or : isOpen ? G.b2 : 'transparent'}`,
