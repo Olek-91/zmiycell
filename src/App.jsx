@@ -2830,7 +2830,6 @@ function AppInner({ isAdmin, onLogout }) {
   const PageWorkers = () => {
     const newName = newWorkerName; const setNewName = setNewWorkerName
     const realWorkers = workers
-    }
 
     const deleteWorker = (w) => openConfirm('Видалити працівника?', <b style={{ color: G.rd }}>{w.name}</b>, () => {
       closeModal()
