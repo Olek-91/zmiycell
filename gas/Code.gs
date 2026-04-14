@@ -307,13 +307,14 @@ function initSheets() {
   ensureSheet(ss, SHEET.RADIO,
     ['id', 'name', 'url'],
     [
-      ['r1', 'Radio Paradise (Rock)',   'https://stream.radioparadise.com/rock-128'],
-      ['r2', 'KEXP 90.3 FM (Seattle)',  'https://kexp-mp3-128.streamguys1.com/kexp128.mp3'],
-      ['r3', 'SomaFM (Metal Detector)', 'https://ice1.somafm.com/metal-128-mp3'],
-      ['r4', 'Wacken Radio (Metal)',    'https://wacken.stream.publicradio.de/wacken_live'],
-      ['r5', 'SomaFM (Indie Pop)',      'https://ice1.somafm.com/indiepop-128-mp3'],
-      ['r6', 'Radio Paradise (Main)',   'https://stream.radioparadise.com/mp3-128'],
-      ['r7', 'Radio ROKS (Україна)',    'https://online.radioroks.ua/RadioROKS_H']
+      ['r1', 'Radio Paradise (Rock)',    'https://stream.radioparadise.com/rock-128'],
+      ['r2', 'Radio Paradise (Main)',    'https://stream.radioparadise.com/mp3-128'],
+      ['r3', 'KEXP 90.3 FM (Seattle)',   'https://kexp-mp3-128.streamguys1.com/kexp128.mp3'],
+      ['r4', 'FIP (France — Rock/Indie)','https://icecast.radiofrance.fr/fiprock-midfi.mp3'],
+      ['r5', 'SomaFM (Metal Detector)',  'https://ice1.somafm.com/metal-128-mp3'],
+      ['r6', 'SomaFM (Indie Pop)',       'https://ice1.somafm.com/indiepop-128-mp3'],
+      ['r7', 'Wacken Radio (Metal)',     'https://wacken.stream.publicradio.de/wacken_live'],
+      ['r8', 'Radio ROKS (Україна)',     'https://online.radioroks.ua/RadioROKS_H'],
     ]
   )
 

@@ -24,7 +24,10 @@ export const useStore = create((set, get) => ({
     try {
       const resp = await gasCall('loadAll')
       const sortByName = (arr) => [...(arr || [])].sort((a,b) => (a.name || '').localeCompare(b.name || '', 'uk'))
-      
+      const dedupeRadio = (arr) => {
+        const seen = new Set()
+        return sortByName(arr || []).filter(s => { if (seen.has(s.url)) return false; seen.add(s.url); return true })
+      }
       set({
         materials:     sortByName(resp.materials),
         typeMaterials: resp.typeMaterials || [],
@@ -37,7 +40,7 @@ export const useStore = create((set, get) => ({
         tools:         sortByName(resp.tools),
         toolLog:       resp.toolLog || [],
         repairLog:     resp.repairLog || [],
-        radioStations: sortByName(resp.radioStations),
+        radioStations: dedupeRadio(resp.radioStations),
         backendVersion: resp.version || '?',
         sync: 'ok'
       })
@@ -51,7 +54,10 @@ export const useStore = create((set, get) => ({
     try {
       const resp = await gasCall('loadAll')
       const sortByName = (arr) => [...(arr || [])].sort((a,b) => (a.name || '').localeCompare(b.name || '', 'uk'))
-
+      const dedupeRadio = (arr) => {
+        const seen = new Set()
+        return sortByName(arr || []).filter(s => { if (seen.has(s.url)) return false; seen.add(s.url); return true })
+      }
       set({
         materials:     sortByName(resp.materials),
         typeMaterials: resp.typeMaterials || [],
@@ -64,7 +70,7 @@ export const useStore = create((set, get) => ({
         tools:         sortByName(resp.tools),
         toolLog:       resp.toolLog || [],
         repairLog:     resp.repairLog || [],
-        radioStations: sortByName(resp.radioStations),
+        radioStations: dedupeRadio(resp.radioStations),
         backendVersion: resp.version || '?',
         sync: 'ok'
       })
