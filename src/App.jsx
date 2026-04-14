@@ -2923,7 +2923,7 @@ function AppInner({ isAdmin, onLogout }) {
       rawReqs.forEach(r => {
         const ex = merged.find(m => m.matId == r.matId)
         if (ex) ex.q = +(ex.q + r.q).toFixed(2)
-        else merged.push({ ...r })
+        else merged.push({ ...r, q: +(r.q).toFixed(2) })
       })
 
       const lines = merged.map(n => {
@@ -2980,7 +2980,7 @@ function AppInner({ isAdmin, onLogout }) {
           rawReqs.forEach(r => {
             const ex = merged.find(m => m.matId == r.matId)
             if (ex) ex.q = +(ex.q + r.q).toFixed(2)
-            else merged.push({ ...r })
+            else merged.push({ ...r, q: +(r.q).toFixed(2) })
           })
 
           return <>
