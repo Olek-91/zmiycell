@@ -4,8 +4,8 @@
 //  Vercel + проксі (api/gas.js)
 //  GET: ?action=назваФункції&params=[...]
 //
-//  APP VERSION: 1.8-calc-safeguards
-var APP_VERSION = "1.8-calc-safeguards";
+//  APP VERSION: 1.9-rounding-sorting
+var APP_VERSION = "1.9-rounding-sorting";
 
 //  НОВА АРХІТЕКТУРА СКЛАДУ:
 //  Materials    — глобальний склад: id, name, unit, stock, photoUrl, isOrdered, shopUrl, minStock
