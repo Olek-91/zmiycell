@@ -605,7 +605,7 @@ function AppInner({ isAdmin, onLogout }) {
   const ALL_NAV = [
     ['prod',       '⚙️',  'ВИР.'],
     ['repair',     '🔧', 'РЕМ.'],
-    ['manual',     '📖', 'РУЧН.'],
+    ['manual',     '📖', 'МАНУАЛ'],
     ['stock',      '📦', 'СКЛАД'],
     ['calculator', '🧮', 'КАЛЬК.'],
     ['shopping',   '🛒', 'ЗАКУП.'],
@@ -625,7 +625,7 @@ function AppInner({ isAdmin, onLogout }) {
   const USER_NAV = [
     ['prod',       '⚙️',  'ВИР.'],
     ['repair',     '🔧', 'РЕМ.'],
-    ['manual',     '📖', 'РУЧН.'],
+    ['manual',     '📖', 'МАНУАЛ'],
     ['stock',      '📦', 'СКЛАД'],
     ['calculator', '🧮', 'КАЛЬК.'],
     ['tools',      '🛠', 'ІНСТР.'],
