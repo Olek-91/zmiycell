@@ -610,8 +610,8 @@ function AppInner({ isAdmin, onLogout }) {
     ['calculator', '🧮', 'КАЛЬК.'],
     ['shopping',   '🛒', 'ЗАКУП.'],
     ['tools',      '🛠', 'ІНСТР.'],
-    ['log',        '📋', 'ЛОГ'],
-    ['actlog',     '📜', 'ЖУРН.'],
+    ['log',        '📋', 'ЖУРН.'],
+    ['actlog',     '📜', 'ЛОГ'],
     ['backup',     '💾', 'БЕКАП'],
     ['workers',    '👷', 'КОМАН.'],
     ['radio',      '📻', 'РАДІО'],
@@ -629,7 +629,7 @@ function AppInner({ isAdmin, onLogout }) {
     ['stock',      '📦', 'СКЛАД'],
     ['calculator', '🧮', 'КАЛЬК.'],
     ['tools',      '🛠', 'ІНСТР.'],
-    ['log',        '📋', 'ЛОГ'],
+    ['log',        '📋', 'ЖУРН.'],
     ['radio',      '📻', 'РАДІО'],
   ]
   const USER_NAV_GROUPS = [
