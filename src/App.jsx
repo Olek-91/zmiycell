@@ -2690,7 +2690,7 @@ function AppInner({ isAdmin, onLogout }) {
         return `• ${gm.name}: ${n.q} ${gm.unit}`
       }).filter(Boolean)
 
-      if (deficit.length === 0) {
+      if (deficitLines.length === 0) {
         return showToast('На складі всього вистачає!', 'info')
       }
 
