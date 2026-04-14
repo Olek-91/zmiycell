@@ -307,14 +307,25 @@ function initSheets() {
   ensureSheet(ss, SHEET.RADIO,
     ['id', 'name', 'url'],
     [
-      ['r1', 'Radio Paradise (Rock)',    'https://stream.radioparadise.com/rock-128'],
-      ['r2', 'Radio Paradise (Main)',    'https://stream.radioparadise.com/mp3-128'],
-      ['r3', 'KEXP 90.3 FM (Seattle)',   'https://kexp-mp3-128.streamguys1.com/kexp128.mp3'],
-      ['r4', 'FIP (France — Rock/Indie)','https://icecast.radiofrance.fr/fiprock-midfi.mp3'],
-      ['r5', 'SomaFM (Metal Detector)',  'https://ice1.somafm.com/metal-128-mp3'],
-      ['r6', 'SomaFM (Indie Pop)',       'https://ice1.somafm.com/indiepop-128-mp3'],
-      ['r7', 'Wacken Radio (Metal)',     'https://wacken.stream.publicradio.de/wacken_live'],
-      ['r8', 'Radio ROKS (Україна)',     'https://online.radioroks.ua/RadioROKS_H'],
+      ['r1', 'Radio Paradise (Rock)',       'https://stream.radioparadise.com/rock-128'],
+      ['r2', 'Radio Paradise (Main)',       'https://stream.radioparadise.com/mp3-128'],
+      ['r3', 'KEXP 90.3 FM (Seattle)',      'https://kexp-mp3-128.streamguys1.com/kexp128.mp3'],
+      ['r4', 'FIP (France — Rock/Indie)',   'https://icecast.radiofrance.fr/fiprock-midfi.mp3'],
+      ['r5', 'SomaFM (Metal Detector)',     'https://ice1.somafm.com/metal-128-mp3'],
+      ['r6', 'SomaFM (Indie Pop)',          'https://ice1.somafm.com/indiepop-128-mp3'],
+      ['r7', 'Wacken Radio (Metal)',        'https://wacken.stream.publicradio.de/wacken_live'],
+      ['r8', 'Radio ROKS (Україна)',        'https://online.radioroks.ua/RadioROKS_H'],
+      // +10 нових жанрів, без реклами
+      ['r9',  'SomaFM (Groove Salad — Ambient/Chillout)',    'https://ice1.somafm.com/groovesalad-128-mp3'],
+      ['r10', 'SomaFM (Drone Zone — Dark Ambient)',          'https://ice1.somafm.com/dronezone-128-mp3'],
+      ['r11', 'SomaFM (Beat Blender — Deep House)',          'https://ice1.somafm.com/beatblender-128-mp3'],
+      ['r12', 'SomaFM (Illinois St. Lounge — Jazz)',         'https://ice1.somafm.com/illstreet-128-mp3'],
+      ['r13', 'SomaFM (Folk Forward — Folk/Acoustic)',       'https://ice1.somafm.com/folkfwd-128-mp3'],
+      ['r14', 'SomaFM (Boot Liquor — Americana/Roots)',      'https://ice1.somafm.com/bootliquor-128-mp3'],
+      ['r15', 'SomaFM (Deep Space One — Space/Ambient)',     'https://ice1.somafm.com/deepspaceone-128-mp3'],
+      ['r16', 'Radio Swiss Jazz',                            'https://stream.srg-ssr.ch/m/rsj/mp3_128'],
+      ['r17', 'Radio Swiss Classic',                         'https://stream.srg-ssr.ch/m/rsc_de/mp3_128'],
+      ['r18', 'WFMU (Freeform/Eclectic — NYC)',              'https://stream.wfmu.org/fmradio.mp3'],
     ]
   )
 
