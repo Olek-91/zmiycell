@@ -610,12 +610,17 @@ function AppInner({ isAdmin, onLogout }) {
     ['stock', '📦', 'СКЛАД'],
     ['calculator', '🧮', 'КАЛЬК.'],
     ['shopping', '🛒', 'ЗАКУП.'],
-    ['tools', '🛠', 'ІНС.'],
+    ['tools', '🛠', 'ІНСТР.'],
     ['log', '📋', 'ЛОГ'],
     ['actlog', '📜', 'ЖУРН.'],
     ['backup', '💾', 'БЕКАП'],
     ['workers', '👷', 'КОМАН.'],
     ['radio', '📻', 'РАДІО'],
+  ]
+  const ALL_NAV_GROUPS = [
+    ['prod', 'repair', 'manual'],
+    ['stock', 'calculator', 'shopping', 'tools'],
+    ['log', 'actlog', 'backup', 'workers', 'radio'],
   ]
   const USER_NAV = [
     ['prod', '⚙', 'ВИР.'],
@@ -623,11 +628,17 @@ function AppInner({ isAdmin, onLogout }) {
     ['manual', '📖', 'РУЧН.'],
     ['stock', '📦', 'СКЛАД'],
     ['calculator', '🧮', 'КАЛЬК.'],
-    ['tools', '🛠', 'ІНС.'],
+    ['tools', '🛠', 'ІНСТР.'],
     ['log', '📋', 'ЛОГ'],
     ['radio', '📻', 'РАДІО'],
   ]
+  const USER_NAV_GROUPS = [
+    ['prod', 'repair', 'manual'],
+    ['stock', 'calculator', 'tools'],
+    ['log', 'radio'],
+  ]
   const NAV = isAdmin ? ALL_NAV : USER_NAV
+  const NAV_GROUPS = isAdmin ? ALL_NAV_GROUPS : USER_NAV_GROUPS
 
   const [prodTab, setProdTab] = useState('writeoff')
   // PageAssembly стан
@@ -3411,11 +3422,29 @@ function AppInner({ isAdmin, onLogout }) {
           <BatteryIcon />
         </div>
       </div>
-      <div className="tab-nav" style={{ display: 'flex', overflowX: 'auto', maxWidth: 700, width: '100%', margin: '0 auto', borderTop: `1px solid rgba(255,255,255,0.05)` }}>
-        {NAV.map(([k, icon, label]) =>
-          <button key={k} onClick={() => setPage(k)} style={{ flex: '0 0 auto', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', borderBottom: `2px solid ${path === k ? G.or : 'transparent'}`, cursor: 'pointer', color: path === k ? G.or : G.t2, transition: '.15s', whiteSpace: 'nowrap', fontFamily: "'Barlow Condensed',sans-serif", fontSize: 13, fontWeight: 700, letterSpacing: .5 }}>
-            <span style={{ fontSize: 16 }}>{icon}</span> {label}
-          </button>)}
+      <div style={{ maxWidth: 700, width: '100%', margin: '0 auto', borderTop: `1px solid rgba(255,255,255,0.05)` }}>
+        {NAV_GROUPS.map((keys, gi) => (
+          <div key={gi} style={{ display: 'flex', borderBottom: gi < NAV_GROUPS.length - 1 ? `1px solid rgba(255,255,255,0.04)` : 'none' }}>
+            {keys.map(k => {
+              const item = NAV.find(n => n[0] === k)
+              if (!item) return null
+              const [, icon, label] = item
+              const active = path === k
+              return (
+                <button key={k} onClick={() => setPage(k)} style={{
+                  flex: '1 1 0', padding: '9px 4px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+                  background: active ? 'rgba(249,115,22,0.08)' : 'none', border: 'none',
+                  borderBottom: `2px solid ${active ? G.or : 'transparent'}`,
+                  cursor: 'pointer', color: active ? G.or : G.t2, transition: '.15s',
+                  fontFamily: "'Barlow Condensed',sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: .5, lineHeight: 1
+                }}>
+                  <span style={{ fontSize: 17 }}>{icon}</span>
+                  <span>{label}</span>
+                </button>
+              )
+            })}
+          </div>
+        ))}
       </div>
     </div>
 
