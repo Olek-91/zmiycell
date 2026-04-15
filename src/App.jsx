@@ -102,7 +102,19 @@ function SyncBadge({ state }) {
     ok: ['✓ синхр.', '#052e16', G.gn, '#166534', false],
     error: ['✕ помилка', '#450a0a', G.rd, '#7f1d1d', false],
   }[state] || ['...', G.b1, G.t2, G.b2, false]
-  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, padding: '3px 9px', borderRadius: 10, background: cfg[1], color: cfg[2], border: `1px solid ${cfg[3]}`, animation: cfg[4] ? 'pulse 1s infinite' : '', fontFamily: "'Fira Code',monospace" }}>{cfg[0]}</span>
+  const backendVersion = useStore(s => s.backendVersion)
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, padding: '3px 9px', borderRadius: 10, background: cfg[1], color: cfg[2], border: `1px solid ${cfg[3]}`, animation: cfg[4] ? 'pulse 1s infinite' : '', fontFamily: "'Fira Code',monospace" }}>
+        {cfg[0]}
+      </span>
+      {state === 'ok' && (
+        <span style={{ fontSize: 9, color: G.t2, fontFamily: 'monospace', opacity: 0.7 }}>
+          GAS v{backendVersion}
+        </span>
+      )}
+    </div>
+  )
 }
 
 function BatteryIcon() {
@@ -822,15 +834,13 @@ function AppInner({ isAdmin, onLogout }) {
   const globalMat = (matId) => materials.find(m => m.id == matId)
 
   const expandAssemblyFallback = useCallback((rootMatId, rootDeficitQty, rootParentName, workerId, typeId) => {
-    const visited = new Set()
-    const resolve = (matId, deficitQty, parentName) => {
-      if (visited.has(matId)) return []
-      visited.add(matId)
-
-      const a = assemblies.find(as => as.outputMatId == matId && as.outputQty > 0 && as.components && as.components.length > 0)
-      const fits = a && (a.isUniversal || typeMaterials.some(tm => tm.typeId == typeId && tm.matId == a.outputMatId))
+    const resolve = (matId, deficitQty, parentName, path = []) => {
+      if (path.includes(matId)) return [] // Запобігаємо нескінченним циклам
+      const currentPath = [...path, matId]
       
-      if (!a || !fits) return null
+      const a = assemblies.find(as => as.outputMatId == matId && as.outputQty > 0 && as.components && as.components.length > 0)
+      
+      if (!a) return null
       
       const batchesNeeded = deficitQty / a.outputQty
       let allSubs = []
@@ -858,8 +868,8 @@ function AppInner({ isAdmin, onLogout }) {
             allSubs.push({ matId: ac.matId, name: cgm.name, unit: cgm.unit, amount: +(fromPersonal + fromStock).toFixed(2), fromPersonal, fromTeam: 0, fromStock, totalStock: stock, isSubstitute: true, substituteFor: parentName })
           }
           const nestedDeficit = +(compAmt - fromPersonal - fromStock).toFixed(2)
-          const nestedSubs = resolve(ac.matId, nestedDeficit, cgm.name)
-          if (nestedSubs) {
+          const nestedSubs = resolve(ac.matId, nestedDeficit, cgm.name, currentPath)
+          if (nestedSubs && nestedSubs.length > 0) {
             allSubs.push(...nestedSubs)
           } else {
             // Реальний дефіцит компонента (сануємо екстремальні від'ємні значення)

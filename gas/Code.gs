@@ -1,5 +1,11 @@
-
 // ══════════════════════════════════════════════════════════════
+/**
+ * zmiyCell OS Backend
+ * Version: 2.1.3
+ * Last Updated: 15.04.2026 20:38
+ */
+
+var VERSION = "2.1.3"
 //  ZmiyCell — Google Apps Script  (Code.gs)
 //  Vercel + проксі (api/gas.js)
 //  GET: ?action=назваФункції&params=[...]
@@ -77,6 +83,14 @@ function sendTelegramAction(text) {
 }
 
 // ── Точка входу GET ───────────────────────────────────────────
+function getBackendInfo() {
+  return {
+    version: VERSION || "unknown",
+    lastUpdated: "15.04.2026 20:41",
+    status: "online"
+  };
+}
+
 function doGet(e) {
   var result
   try {
@@ -152,6 +166,7 @@ var ACTIONS = {
   addProductionEntry:     writeOff,
   produceBatteries:       writeOff,
   updateRepairStatus:     updateRepairStatus,
+  getBackendInfo:         getBackendInfo,
   returnRepairMaterials:  returnRepairMaterials,
   deleteRepair:           deleteRepair,
 
@@ -557,7 +572,7 @@ function loadAll() {
     radioStations: rows(ss, SHEET.RADIO).map(function(r) {
       return { id: r.id, name: r.name, url: r.url }
     }),
-    version: APP_VERSION
+    version: VERSION
   }
 }
 
@@ -819,6 +834,7 @@ function deductPrep(ss, workerName, typeId, matId, needed) {
       rem = +(rem - use).toFixed(2)
     }
   }
+  if (rem > 0) { console.warn('deductPrep incomplete: ' + matId + ' needs ' + rem); }
 }
 
 function deductPrepByWorkerId(ss, workerId, typeId, matId, needed) {
@@ -844,6 +860,7 @@ function deductPrepByWorkerId(ss, workerId, typeId, matId, needed) {
       rem = +(rem - use).toFixed(2)
     }
   }
+  if (rem > 0) { console.warn('deductPrepByWorkerId incomplete: ' + matId + ' needs ' + rem); }
 }
 
 // ══════════════════════════════════════════════════════════════
