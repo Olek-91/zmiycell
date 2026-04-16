@@ -1691,7 +1691,7 @@ function AppInner({ isAdmin, onLogout }) {
         isAdmin={isAdmin}
         getWorkerColor={getWorkerColor}
       />}
-      {prodTab === 'assembly' && <AssemblyTab />}
+      {prodTab === 'assembly' && AssemblyTab()}
     </>)
   }
   // ── Склад ─────────────────────────────────────────────────
@@ -3533,7 +3533,7 @@ function AppInner({ isAdmin, onLogout }) {
     {toast && <Toast {...toast} />}
     {modal?.type === 'confirm' && <ConfirmModal title={modal.title} body={modal.body} onYes={modal.onYes} onNo={closeModal} />}
     {modal?.type === 'input' && <InputModal title={modal.title} placeholder={modal.placeholder} defaultValue={modal.defaultVal} onConfirm={modal.onConfirm} onCancel={closeModal} />}
-    {modal?.type === 'history' && <Modal onClose={closeModal}><HistoryModal mat={modal.mat} entries={modal.entries} /></Modal>}
+    {modal?.type === 'history' && <Modal onClose={closeModal}>{HistoryModal({ mat: modal.mat, entries: modal.entries })}</Modal>}
     <SnakeCubeLoader sync={sync} logoRef={headerLogoRef} />
     <audio ref={globalAudioRef} preload="none" />
   </>
