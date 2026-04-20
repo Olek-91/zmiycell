@@ -455,6 +455,9 @@ function loadAll() {
   var acRows   = rows(ss, SHEET.ASSEM_COMP)
 
   var assemblies = asRows.map(function(a) {
+    var dest = String(a.defDest || a.isUniversal || 'stock')
+    if (dest === 'true' || dest === 'false') dest = 'stock'
+
     return {
       id:          a.id,
       name:        a.name,
@@ -463,7 +466,7 @@ function loadAll() {
       unit:        a.unit || '',
       notes:       a.notes || '',
       manual:      a.manual || '',
-      isUniversal: a.isUniversal === true || a.isUniversal === 'true',
+      defDest:     dest,
       components:  acRows
         .filter(function(ac) { return ac.assemblyId === a.id })
         .map(function(ac) { return { id:ac.id, assemblyId:ac.assemblyId, matId:ac.matId, qty:num(ac.qty) } }),
@@ -1428,26 +1431,26 @@ function buildDefaultMaterials() {
 //  Assemblies:        id, name, outputMatId, outputQty, unit, notes
 //  AssemblyComponents: id, assemblyId, matId, qty
 // ══════════════════════════════════════════════════════════════
-function addAssembly(name, outputMatId, outputQty, unit, notes, manual, isUniversal) {
+function addAssembly(name, outputMatId, outputQty, unit, notes, manual, defDest) {
   var ss = SpreadsheetApp.getActiveSpreadsheet()
   var sh = ss.getSheetByName(SHEET.ASSEMBLIES)
   if (!sh) {
     sh = ss.insertSheet(SHEET.ASSEMBLIES)
-    sh.getRange(1,1,1,8).setValues([['id','name','outputMatId','outputQty','unit','notes','manual','isUniversal']])
+    sh.getRange(1,1,1,8).setValues([['id','name','outputMatId','outputQty','unit','notes','manual','defDest']])
   }
-  ensureColumn(sh, 'isUniversal')
+  ensureColumn(sh, 'defDest')
   var id = 'asm_' + Date.now()
-  sh.appendRow([id, name, outputMatId, num(outputQty), unit||'', notes||'', manual||'', isUniversal === true || isUniversal === 'true'])
+  sh.appendRow([id, name, outputMatId, num(outputQty), unit||'', notes||'', manual||'', defDest || 'stock'])
   return { ok:true, id:id }
 }
 
 function updateAssemblyField(asmId, field, value) {
-  var colMap = { name:2, outputMatId:3, outputQty:4, unit:5, notes:6, manual:7, isUniversal:8 }
+  var colMap = { name:2, outputMatId:3, outputQty:4, unit:5, notes:6, manual:7, defDest:8 }
   var col = colMap[field]
-  if (!col) return { ok:false, error:'Невідоме поле: '+field }
+  if (!col) return { ok:false, error:'Незавідоме поле: '+field }
   var ss   = SpreadsheetApp.getActiveSpreadsheet()
   var sh   = ss.getSheetByName(SHEET.ASSEMBLIES)
-  ensureColumn(sh, 'isUniversal')
+  ensureColumn(sh, 'defDest')
   var data = sh.getDataRange().getValues()
   for (var i=1; i<data.length; i++) {
     if (String(data[i][0])===String(asmId)) {

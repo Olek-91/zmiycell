@@ -678,8 +678,8 @@ function AppInner({ isAdmin, onLogout }) {
   const [newAsmOutMatId, setNewAsmOutMatId] = useState('')
   const [newAsmOutQty, setNewAsmOutQty] = useState('1')
   const [newAsmNotes, setNewAsmNotes] = useState('')
-  const [newAsmIsUniversal, setNewAsmIsUniversal] = useState(false)
-  const [editAsmIsUniversal, setEditAsmIsUniversal] = useState(false)
+  const [newAsmDefDest, setNewAsmDefDest] = useState('stock')
+  const [editAsmDefDest, setEditAsmDefDest] = useState('stock')
   const [newAsmComps, setNewAsmComps] = useState({})
   const [newAsmDefaultTypeId, setNewAsmDefaultTypeId] = useState('')
   const [newAcMatId, setNewAcMatId] = useState('')
@@ -1337,116 +1337,108 @@ function AppInner({ isAdmin, onLogout }) {
   }
 
   const doProduceAssembly = () => {
-    const asm = assemblies.find(a => a.id == asmId)
     const worker = workers.find(w => w.id === asmWorker)
-    if (!asm) return showToast('Оберіть збірку', 'err')
     if (!worker) return showToast('Оберіть працівника', 'err')
-    if (!asmQty || asmQty <= 0) return showToast('Введіть кількість', 'err')
 
-    const consumed = buildAssemblyConsumed(asm, worker.id, asmQty)
-    const shortage = consumed.find(c => c.fromStock > c.totalStock)
+    const validBatch = asmBatch.filter(b => b.asmId && b.qty > 0)
+    if (validBatch.length === 0) return showToast('Додайте хоча б одну збірку', 'err')
 
-    if (shortage) {
-      return showToast('Не вистачає: ' + shortage.name, 'err')
-    }
+    const batchEntries = validBatch.map(b => {
+      const asm = assemblies.find(a => a.id == b.asmId)
+      if (!asm) return null
+      const consumed = buildAssemblyConsumed(asm, worker.id, b.qty)
+      const shortage = consumed.find(c => c.fromStock > c.totalStock)
+      const outputAmt = +(asm.outputQty * b.qty).toFixed(2)
+      return { asm, qty: b.qty, consumed, shortage, outputAmt }
+    }).filter(Boolean)
 
-    const outputAmt = +(asm.outputQty * asmQty).toFixed(2)
-    openConfirm('Підтвердити виготовлення',
+    const firstShortage = batchEntries.find(e => e.shortage)
+    if (firstShortage) return showToast(`Не вистачає матеріалів для ${firstShortage.asm.name} (Бракує: ${firstShortage.shortage.name})`, 'err')
+
+    openConfirm('ВИГОТОВИТИ КОМПЛЕКТ ЗБІРОК',
       <div style={{ fontSize: 13, color: G.t2, lineHeight: 1.8 }}>
-        <b style={{ color: G.or }}>{asm.name}</b><br />
-        Кількість: <b style={{ color: G.cy }}>{asmQty}</b> партій → {outputAmt} {asm.unit}<br />
+        Виготовляємо <b>{validBatch.length}</b> різних позицій.<br/>
         Працівник: {worker.name}<br />
-        Куди відправити: <b style={{ color: G.gn }}>{asmDestination === 'stock' ? 'На глобальний склад' : asmDestination === 'personal' ? 'Особиста заготовка' : 'Спільна (для всіх) заготовка'}</b><br />
-        <div style={{ marginTop: 8 }}>
-          {consumed.map(c => {
-            return <div key={c.matId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0', borderBottom: `1px solid ${G.b1}`, fontSize: 12 }}>
-              <span style={{ color: G.t1, paddingRight: 8 }}>{c.name}</span>
-              <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                {c.fromPersonal > 0 && <Chip bg='#2e1065' color='#c084fc' bd='#4c1d95'>👷{c.fromPersonal}</Chip>}
-                {c.fromTeam > 0 && <Chip bg='#1e3a8a' color='#93c5fd' bd='#1e40af'>🤝{c.fromTeam}</Chip>}
-                {c.fromStock > 0 && <Chip bg='#1c1007' color='#fb923c' bd='#9a3412'>🏭{c.fromStock}</Chip>}
-                <span style={{ color: G.gn, fontWeight: 600, minWidth: 60, textAlign: 'right' }}>−{c.amount} {c.unit}</span>
-              </div>
-            </div>
+        <div style={{ marginTop: 8, padding: 8, background: '#1e293b', borderRadius: 8 }}>
+          {batchEntries.map((e, i) => {
+             const destText = e.asm.defDest === 'personal' ? 'Особ. заготовка' : e.asm.defDest === 'team' ? 'Спільна заготовка' : 'Глоб. склад'
+             return <div key={i} style={{ borderBottom: i < batchEntries.length - 1 ? `1px dashed ${G.b2}` : 'none', padding: '4px 0' }}>
+               <b style={{color:G.or}}>{e.qty}</b> шт — <b style={{color:G.cy}}>{e.asm.name}</b> <br/>
+               <span style={{fontSize: 11, color: G.t2}}>➔ {e.outputAmt} {e.asm.unit} ({destText})</span>
+             </div>
           })}
         </div>
       </div>,
       async () => {
         closeModal()
-        // Here we send the advanced payload to the backend
-        const entry = { assemblyId: asm.id, qty: asmQty, workerId: worker.id, workerName: worker.name, date: asmDate, datetime: nowStr(), destination: asmDestination, consumed, outputAmt }
+        let successCount = 0
+        let logsToAdd = []
         try {
-          await api('produceAssemblyAdvanced', [{ ...entry, consumed: compressConsumed(consumed) }])
-
-          // Списуємо компоненти локально
-          consumed.forEach(c => { if (c.fromStock > 0) updateGlobalStock(c.matId, -c.fromStock) })
-
-          // Зменшуємо prepItems (аналогічно до списання батарей)
-          setPrepItems(prev => {
-            const next = prev.map(p => ({ ...p }))
-            consumed.forEach(c => {
-              const doDeduct = (isTeam, amt) => {
-                if (!amt) return
-                let rem = amt
-                next.filter(p => (isTeam ? p.scope === 'all' : (p.workerId === worker.id && p.scope !== 'all')) && p.matId === c.matId && p.status !== 'returned').forEach(p => {
-                  if (rem <= 0) return
-                  const avail = p.qty - p.returnedQty
-                  const use = Math.min(avail, rem)
-                  p.returnedQty = +(p.returnedQty + use).toFixed(2)
-                  p.status = p.returnedQty >= p.qty ? 'returned' : 'partial'
-                  rem = +(rem - use).toFixed(2)
+          for (const ev of batchEntries) {
+             const dest = ev.asm.defDest || 'stock'
+             const entry = { assemblyId: ev.asm.id, qty: ev.qty, workerId: worker.id, workerName: worker.name, date: asmDate, datetime: nowStr(), destination: dest, consumed: ev.consumed, outputAmt: ev.outputAmt }
+             await api('produceAssemblyAdvanced', [{ ...entry, consumed: compressConsumed(ev.consumed) }])
+             
+             ev.consumed.forEach(c => { if (c.fromStock > 0) updateGlobalStock(c.matId, -c.fromStock) })
+             
+             setPrepItems(prev => {
+                const next = prev.map(p => ({ ...p }))
+                ev.consumed.forEach(c => {
+                  const doDeduct = (isTeam, amt) => {
+                    if (!amt) return
+                    let rem = amt
+                    next.filter(p => (isTeam ? p.scope === 'all' : (p.workerId === worker.id && p.scope !== 'all')) && p.matId === c.matId && p.status !== 'returned').forEach(p => {
+                      if (rem <= 0) return
+                      const avail = p.qty - p.returnedQty
+                      const use = Math.min(avail, rem)
+                      p.returnedQty = +(p.returnedQty + use).toFixed(2)
+                      p.status = p.returnedQty >= p.qty ? 'returned' : 'partial'
+                      rem = +(rem - use).toFixed(2)
+                    })
+                  }
+                  doDeduct(false, c.fromPersonal)
+                  doDeduct(true, c.fromTeam)
                 })
-              }
-              doDeduct(false, c.fromPersonal)
-              doDeduct(true, c.fromTeam)
-            })
+                
+                if (dest !== 'stock') {
+                  const gm = globalMat(ev.asm.outputMatId)
+                  next.unshift({
+                    id: 'tmp_prep_' + Date.now() + Math.random(),
+                    workerId: worker.id,
+                    workerName: worker.name,
+                    typeId: 'ALL',
+                    matId: ev.asm.outputMatId,
+                    matName: gm?.name || ev.asm.outputMatId,
+                    unit: ev.asm.unit,
+                    qty: ev.outputAmt,
+                    returnedQty: 0,
+                    date: asmDate,
+                    datetime: nowStr(),
+                    status: 'active',
+                    scope: dest === 'team' ? 'all' : 'self'
+                  })
+                }
+                return next
+             })
 
-            // Якщо результат йде як заготовка - створюємо нову локально
-            if (asmDestination !== 'stock') {
-              const gm = globalMat(asm.outputMatId)
-              next.unshift({
-                id: 'tmp_prep_' + Date.now(),
-                workerId: worker.id,
-                workerName: worker.name,
-                typeId: 'ALL',
-                matId: asm.outputMatId,
-                matName: gm?.name || asm.outputMatId,
-                unit: asm.unit,
-                qty: outputAmt,
-                returnedQty: 0,
-                date: asmDate,
-                datetime: nowStr(),
-                status: 'active',
-                scope: asmDestination === 'team' ? 'all' : 'self'
-              })
-            }
+             if (dest === 'stock') {
+                updateGlobalStock(ev.asm.outputMatId, ev.outputAmt)
+             }
 
-            return next
-          })
-
-          // Додаємо виготовлене на склад, якщо вибрано Склад
-          if (asmDestination === 'stock') {
-            updateGlobalStock(asm.outputMatId, outputAmt)
+             logsToAdd.push({
+               id: 'asmL_' + ev.asm.id + '_' + Date.now() + Math.random(),
+               datetime: nowStr(), date: asmDate, typeId: '',
+               typeName: ev.asm.name + (dest !== 'stock' ? ' (як заготовка)' : ''),
+               workerName: worker.name, count: ev.qty,
+               serials: [], consumed: ev.consumed, kind: 'assembly', repairNote: ''
+             })
+             successCount++
           }
-
-          // Додаємо локально в лог, щоб воно відразу з'явилося в Журналі без перезавантаження сторінки
-          const asmLogEntry = {
-            id: 'asmL_' + asm.id + '_' + Date.now(),
-            datetime: nowStr(),
-            date: asmDate,
-            typeId: '',
-            typeName: asm.name + (asmDestination !== 'stock' ? ' (як заготовка)' : ''),
-            workerName: worker.name,
-            count: asmQty,
-            serials: [],
-            consumed,
-            kind: 'assembly',
-            repairNote: ''
-          }
-          setLog(prev => [asmLogEntry, ...prev])
-
-          showToast(`✓ Виготовлено: ${outputAmt} ${asm.unit} → ${asm.name}`)
-        } catch { }
+          
+          setLog(prev => [...logsToAdd, ...prev])
+          setAsmBatch([{ id: Date.now(), asmId: '', qty: 1 }])
+          showToast(`✓ Виготовлено позицій: ${successCount}`)
+        } catch(err) {}
       }
     )
   }
@@ -2008,13 +2000,13 @@ function AppInner({ isAdmin, onLogout }) {
         if (requiredComps.length < 2) return showToast("Збірка повинна містити хоча б 2 матеріали", 'err')
 
         const gm = globalMat(newAsmOutMatId)
-        const res = await api('addAssembly', [newAsmName, newAsmOutMatId, parseFloat(newAsmOutQty) || 1, gm?.unit || '', newAsmNotes, '', newAsmIsUniversal])
+        const res = await api('addAssembly', [newAsmName, newAsmOutMatId, parseFloat(newAsmOutQty) || 1, gm?.unit || '', newAsmNotes, '', newAsmDefDest])
         if (!res.ok) return showToast(res.error, 'err')
 
         await api('saveAssemblyComponents', [res.id, JSON.stringify(requiredComps)])
         const newComponents = requiredComps.map((c, i) => ({ id: 'ac_' + Date.now() + '_' + i, assemblyId: res.id, matId: c.matId, qty: c.qty }))
 
-        const na = { id: res.id, name: newAsmName, outputMatId: newAsmOutMatId, outputQty: parseFloat(newAsmOutQty) || 1, unit: gm?.unit || '', notes: newAsmNotes, components: newComponents, isUniversal: newAsmIsUniversal }
+        const na = { id: res.id, name: newAsmName, outputMatId: newAsmOutMatId, outputQty: parseFloat(newAsmOutQty) || 1, unit: gm?.unit || '', notes: newAsmNotes, components: newComponents, defDest: newAsmDefDest }
 
         if (newAsmDefaultTypeId) {
           try {
@@ -2024,7 +2016,7 @@ function AppInner({ isAdmin, onLogout }) {
         }
 
         setAssemblies(prev => [...prev, na])
-        setNewAsmName(''); setNewAsmNotes(''); setNewAsmComps({}); setNewAsmIsUniversal(false); setNewAsmDefaultTypeId('');
+        setNewAsmName(''); setNewAsmNotes(''); setNewAsmComps({}); setNewAsmDefDest('stock'); setNewAsmDefaultTypeId('');
         showToast('✓ Збірку створено: ' + newAsmName + (newAsmDefaultTypeId ? ' та прив\'язано до типу' : ''))
       }
 
@@ -2043,7 +2035,7 @@ function AppInner({ isAdmin, onLogout }) {
         a.components.forEach(ac => initial[ac.matId] = ac.qty)
         setEditAsmComps(initial)
         setEditAsmId(a.id)
-        setEditAsmIsUniversal(!!a.isUniversal)
+        setEditAsmDefDest(a.defDest || 'stock')
       }
 
       const saveEditAsm = async (a) => {
@@ -2051,13 +2043,13 @@ function AppInner({ isAdmin, onLogout }) {
         if (mats.length < 2) return showToast('Збірка повинна містити хоча б 2 матеріали', 'err')
 
         closeModal()
-        await api('updateAssemblyField', [a.id, 'isUniversal', editAsmIsUniversal])
+        await api('updateAssemblyField', [a.id, 'defDest', editAsmDefDest])
         await api('saveAssemblyComponents', [a.id, JSON.stringify(mats)])
 
         setAssemblies(prev => prev.map(ax => {
           if (ax.id !== a.id) return ax
           const newComps = mats.map((m, i) => ({ id: 'ac_' + Date.now() + '_' + i, assemblyId: a.id, matId: m.matId, qty: m.qty }))
-          return { ...ax, components: newComps, isUniversal: editAsmIsUniversal }
+          return { ...ax, components: newComps, defDest: editAsmDefDest }
         }))
         setEditAsmId(null)
         showToast('✓ Склад збірки збережено')
@@ -2078,7 +2070,7 @@ function AppInner({ isAdmin, onLogout }) {
                 <div style={{ fontSize: 14, fontWeight: 700, color: '#a78bfa' }}>{a.name}</div>
                 <div style={{ fontSize: 12, color: G.t2, marginTop: 2 }}>
                   → <b style={{ color: G.cy }}>{a.outputQty}</b> {gm?.unit || a.unit} <b>{gm?.name || '?'}</b> на складі
-                  {a.isUniversal && <span style={{ color: G.gn, marginLeft: 8, fontSize: 10, border: `1px solid ${G.gn}`, borderRadius: 4, padding: '0 4px' }}>УНІВЕРСАЛЬНА</span>}
+                  {<span style={{ color: G.t1, marginLeft: 8, fontSize: 10, border: `1px solid ${G.b1}`, borderRadius: 4, padding: '2px 4px', background: '#1e293b' }}>{a.defDest === 'personal' ? '👷 Особ. заготовка' : a.defDest === 'team' ? '🤝 Спільна заготовка' : '🏭 На Склад'}</span>}
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 4 }}>
@@ -2186,10 +2178,14 @@ function AppInner({ isAdmin, onLogout }) {
               </select>
             </FormRow>
             <FormRow label="Нотатка для працівника"><input placeholder="напр. інструкція щодо пайки" value={newAsmNotes} onChange={e => setNewAsmNotes(e.target.value)} /></FormRow>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 16 }}>
-              <input id="new-asm-uni" type="checkbox" checked={newAsmIsUniversal} onChange={e => setNewAsmIsUniversal(e.target.checked)} style={{ width: 20, height: 20, accentColor: G.gn, flexShrink: 0, marginTop: 2 }} />
-              <label htmlFor="new-asm-uni" style={{ fontSize: 14, color: G.gn, fontWeight: 700, lineHeight: 1.3, wordBreak: 'break-word' }}>🌎 УНІВЕРСАЛЬНА ЗБІРКА (розкладати в калькуляторі)</label>
-            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+     <span style={{ fontSize: 13, color: G.t2 }}>Куди йде збірка?</span>
+     <select value={newAsmDefDest} onChange={e => setNewAsmDefDest(e.target.value)} style={{ flex: 1, padding: 8 }}>
+       <option value="stock">🏭 На Глобальний склад</option>
+       <option value="personal">👷 В Особисту заготовку</option>
+       <option value="team">🤝 У Спільну заготовку</option>
+     </select>
+   </div>
             <SubmitBtn onClick={createAsm} color='#a78bfa'>+ ЗБЕРЕГТИ ЗБІРКУ ТА ЇЇ СКЛАД</SubmitBtn>
           </div>
         </Card>
