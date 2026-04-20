@@ -2616,6 +2616,7 @@ function AppInner({ isAdmin, onLogout }) {
                 <div style={{ fontSize: 12, color: workerLineColor, fontWeight: 600 }}>{e.workerName}</div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                {isAdmin && <button onClick={() => doUndoAction(e)} style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444', color: '#ef4444', fontSize: 10, padding: '1px 6px', borderRadius: 4, cursor: 'pointer', marginBottom: 2 }}>↩️ Відмінити</button>}
                 <span style={{ fontSize: 11, color: G.t2, flexShrink: 0 }}>{e.datetime}</span>
                 {isPrepEntry && (
                   prepActive
