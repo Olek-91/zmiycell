@@ -2122,9 +2122,13 @@ function AppInner({ isAdmin, onLogout }) {
                   </div>}
                 </div>
               })}
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 12, padding: '8px 0', borderTop: `1px dashed ${G.b1}` }}>
-                <input id={`edit-uni-${a.id}`} type="checkbox" checked={editAsmIsUniversal} onChange={e => setEditAsmIsUniversal(e.target.checked)} style={{ width: 18, height: 18, accentColor: G.gn, flexShrink: 0, marginTop: 2 }} />
-                <label htmlFor={`edit-uni-${a.id}`} style={{ fontSize: 13, color: G.t1, fontWeight: 700, lineHeight: 1.3, wordBreak: 'break-word' }}>🌎 УНІВЕРСАЛЬНА ЗБІРКА (розкладати в калькуляторі)</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, padding: '8px 0', borderTop: `1px dashed ${G.b1}` }}>
+                <span style={{ fontSize: 13, color: G.t2 }}>Куди йде збірка?</span>
+                <select value={editAsmDefDest} onChange={e => setEditAsmDefDest(e.target.value)} style={{ flex: 1, padding: '6px 4px' }}>
+                  <option value="stock">🏭 На Глобальний склад</option>
+                  <option value="personal">👷 В Особисту заготовку</option>
+                  <option value="team">🤝 У Спільну заготовку</option>
+                </select>
               </div>
             </div>}
           </div>
