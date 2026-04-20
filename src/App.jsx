@@ -667,11 +667,9 @@ function AppInner({ isAdmin, onLogout }) {
 
   const [prodTab, setProdTab] = useState('writeoff')
   // PageAssembly стан
-  const [asmId, setAsmId] = useState('')
-  const [asmQty, setAsmQty] = useState(1)
+  const [asmBatch, setAsmBatch] = useState([{ id: Date.now(), asmId: '', qty: 1 }])
   const [asmWorker, setAsmWorker] = usePersistentState('zc_asmWorker', '')
   const [asmDate, setAsmDate] = useState(todayStr())
-  const [asmDestination, setAsmDestination] = useState('stock') // 'stock' | 'personal' | 'team'
   // Редактор збірок (адмін)
   const [asmTab, setAsmTab] = useState('produce') // 'produce' | 'manage'
   const [editAsmId, setEditAsmId] = useState(null) // яку збірку редагуємо
@@ -1541,9 +1539,7 @@ function AppInner({ isAdmin, onLogout }) {
 
   // ── Таб Збірка (всередині ВИРОБНИЦТВО) ───────────────────
   const AssemblyTab = () => {
-    const curAsm = assemblies.find(a => a.id == asmId)
     const worker = workers.find(w => w.id === asmWorker)
-    const consumed = curAsm && worker ? buildAssemblyConsumed(curAsm, worker.id, asmQty) : []
 
     if (assemblies.length === 0) return (
       <Card>
@@ -1553,67 +1549,73 @@ function AppInner({ isAdmin, onLogout }) {
       </Card>
     )
 
+    const validBatch = asmBatch.filter(b => b.asmId && b.qty > 0)
+    let summaryConsumed = []
+    if (worker && validBatch.length > 0) {
+      const mergedMap = new Map()
+      validBatch.forEach(b => {
+        const asm = assemblies.find(a => a.id == b.asmId)
+        if (asm) {
+           const c = buildAssemblyConsumed(asm, worker.id, b.qty)
+           c.forEach(item => {
+             const ex = mergedMap.get(item.matId)
+             if(ex) { ex.amount += item.amount; }
+             else { mergedMap.set(item.matId, {...item}) }
+           })
+        }
+      })
+      summaryConsumed = Array.from(mergedMap.values())
+    }
+
     return <>
       <Card>
-        <CardTitle color='#a78bfa'>⚙️ ВИГОТОВИТИ ЗБІРКУ</CardTitle>
-        <FormRow label="ЗБІРКА">
-          <select value={asmId} onChange={e => setAsmId(e.target.value)}>
-            <option value="">— оберіть збірку —</option>
-            {assemblies.map(a => {
-              const gm = globalMat(a.outputMatId)
-              return <option key={a.id} value={a.id}>{a.name} → {a.outputQty} {gm?.unit || a.unit} {gm?.name || ''}</option>
-            })}
-          </select>
-        </FormRow>
-        <FormRow label="КІЛЬКІСТЬ ПАРТІЙ">
-          <input type="number" min="1" value={asmQty} onChange={e => setAsmQty(e.target.value)} />
-        </FormRow>
-        <FormRow label="ПРАЦІВНИК">
-          <select value={asmWorker} onChange={e => setAsmWorker(e.target.value)}>
-            {workers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-          </select>
-        </FormRow>
-        <FormRow label="ДАТА"><input value={asmDate} onChange={e => setAsmDate(e.target.value)} /></FormRow>
-
-        <FormRow label="КУДИ ВІДПРАВИТИ ГОТОВУ ЗБІРКУ?">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-              <input type="radio" name="asmDest" value="personal" checked={asmDestination === 'personal'} onChange={e => setAsmDestination(e.target.value)} style={{ accentColor: '#a78bfa' }} />
-              <span style={{ color: G.t1, fontSize: 14 }}>Особиста заготовка 👷</span>
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-              <input type="radio" name="asmDest" value="team" checked={asmDestination === 'team'} onChange={e => setAsmDestination(e.target.value)} style={{ accentColor: '#a78bfa' }} />
-              <span style={{ color: G.t1, fontSize: 14 }}>Спільна заготовка (для всіх) 🤝</span>
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-              <input type="radio" name="asmDest" value="stock" checked={asmDestination === 'stock'} onChange={e => setAsmDestination(e.target.value)} style={{ accentColor: '#fb923c' }} />
-              <span style={{ color: G.or, fontSize: 14 }}>Глобальний склад 🏭</span>
-            </label>
+        <CardTitle color='#a78bfa'>⚙️ ВИГОТОВИТИ КОМПЛЕКТ ЗБІРОК</CardTitle>
+        <FormRow label="ПРАЦІВНИК & ДАТА">
+          <div style={{ display: 'flex', gap: 8 }}>
+            <select style={{ flex: 2 }} value={asmWorker} onChange={e => setAsmWorker(e.target.value)}>
+              <option value="">- оберіть -</option>
+              {workers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+            <input style={{ flex: 1, padding: '8px', textAlign: 'center' }} value={asmDate} onChange={e => setAsmDate(e.target.value)} />
           </div>
         </FormRow>
+
+        <div style={{ marginTop: 16 }}>
+          <Label>ПОЗИЦІЇ КОМПЛЕКТУ (додаються відразу на склад):</Label>
+          {asmBatch.map((item) => (
+            <div key={item.id} style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center' }}>
+              <select style={{ flex: 1, padding: '8px 4px' }} value={item.asmId} onChange={e => setAsmBatch(v => v.map(b => b.id===item.id ? {...b, asmId: e.target.value} : b))}>
+                <option value="">— оберіть збірку —</option>
+                {assemblies.map(a => {
+                  const gm = globalMat(a.outputMatId)
+                  return <option key={a.id} value={a.id}>{a.name} → {a.outputQty} {gm?.unit || a.unit}</option>
+                })}
+              </select>
+              <input type="number" min="1" step="any" style={{ width: 62, textAlign: 'center', padding: '8px 4px' }} value={item.qty} onChange={e => setAsmBatch(v => v.map(b => b.id===item.id ? {...b, qty: e.target.value} : b))} />
+              <button 
+                onClick={() => setAsmBatch(v => v.length > 1 ? v.filter(b => b.id!==item.id) : v)}
+                style={{ background: '#450a0a', border: 'none', color: '#fca5a5', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', height: 35 }}
+              >✕</button>
+            </div>
+          ))}
+          <button 
+            onClick={() => setAsmBatch(v => [...v, { id: Date.now()+Math.random(), asmId: '', qty: 1 }])}
+            style={{ width: '100%', padding: 10, background: 'rgba(167, 139, 250, 0.1)', color: '#a78bfa', border: '1px dashed #a78bfa', borderRadius: 8, marginTop: 4, cursor: 'pointer', fontFamily: "'Fira Code',monospace" }}
+          >+ Додати нову позицію</button>
+        </div>
       </Card>
 
-      {curAsm && consumed.length > 0 && <Card>
-        <CardTitle color='#a78bfa'>⚡ БУДЕ СПИСАНО ДЛЯ ЗБІРКИ</CardTitle>
-        {consumed.map(c => {
-          const ok = c.fromStock <= c.totalStock
-          return <div key={c.matId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: `1px solid ${G.b1}`, fontSize: 13 }}>
-            <span style={{ color: ok ? G.t1 : G.rd, flex: 1, paddingRight: 8 }}>{c.name}</span>
-            <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              {c.fromPersonal > 0 && <Chip bg='#2e1065' color='#c084fc' bd='#4c1d95'>👷{c.fromPersonal}</Chip>}
-              {c.fromTeam > 0 && <Chip bg='#1e3a8a' color='#93c5fd' bd='#1e40af'>🤝{c.fromTeam}</Chip>}
-              {c.fromStock > 0 && <Chip bg='#1c1007' color='#fb923c' bd='#9a3412'>🏭{c.fromStock}</Chip>}
-              <span style={{ color: ok ? G.gn : G.rd, fontWeight: 600, minWidth: 60, textAlign: 'right' }}>{c.amount} {c.unit}</span>
-            </div>
+      {summaryConsumed.length > 0 && <Card>
+        <CardTitle color='#a78bfa'>⚡ ЗАГАЛОМ БУДЕ СПИСАНО ДЛЯ КОМПЛЕКТУ</CardTitle>
+        {summaryConsumed.map(c => {
+          return <div key={c.matId} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: `1px solid ${G.b1}`, fontSize: 13 }}>
+            <span style={{ color: G.t1 }}>{c.name}</span>
+            <span style={{ color: '#fb923c', fontWeight: 600 }}>−{c.amount.toFixed(2)} {c.unit}</span>
           </div>
         })}
-        <div style={{ borderTop: `1px solid ${G.b2}`, marginTop: 12, paddingTop: 12, display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
-          <span style={{ color: G.t2 }}>Отримаємо:</span>
-          <span style={{ color: '#a78bfa', fontWeight: 800 }}>+{+(curAsm.outputQty * asmQty).toFixed(2)} {globalMat(curAsm.outputMatId)?.unit || curAsm.unit} {globalMat(curAsm.outputMatId)?.name || ''}</span>
-        </div>
       </Card>}
 
-      <SubmitBtn onClick={doProduceAssembly} color='#a78bfa'>⚙️ ВИГОТОВИТИ ЗБІРКУ</SubmitBtn>
+      <SubmitBtn onClick={doProduceAssembly} color='#a78bfa'>⚙️ ВИГОТОВИТИ ВСІ ПОЗИЦІЇ ({validBatch.length})</SubmitBtn>
     </>
   }
 
@@ -2675,24 +2677,24 @@ function AppInner({ isAdmin, onLogout }) {
       const tms = typeMaterials.filter(tm => tm.typeId == calcTypeId)
       if (tms.length === 0) return showToast('Матеріали не налаштовані', 'err')
 
-      const getDeficitRecursive = (mId, q, forceExplode) => {
+      const getDeficitRecursive = (mId, q) => {
         const gm = materials.find(m => String(m.id) === String(mId))
         if (!gm) return []
         
-        const inStock = gm.stock || 0
-        const deficit = Math.max(0, q - inStock)
-        if (deficit <= 0) return []
-
         const a = assemblies.find(as => String(as.outputMatId) === String(mId))
-        if (a && forceExplode) {
-          const factor = deficit / a.outputQty
-          return a.components.flatMap(ac => getDeficitRecursive(ac.matId, ac.qty * factor, true))
+        if (a) {
+          const factor = q / (a.outputQty || 1)
+          return a.components.flatMap(ac => getDeficitRecursive(ac.matId, ac.qty * factor))
         }
+
+        const safeStock = gm.stock || 0
+        const deficit = Math.max(0, +(q - safeStock).toFixed(2))
+        if (deficit <= 0) return []
         
         return [{ matId: mId, q: deficit }]
       }
 
-      const totalDeficits = tms.flatMap(tm => getDeficitRecursive(tm.matId, tm.perBattery * qty, true))
+      const totalDeficits = tms.flatMap(tm => getDeficitRecursive(tm.matId, tm.perBattery * qty))
       const merged = []
       totalDeficits.forEach(d => {
         const ex = merged.find(m => m.matId == d.matId)
@@ -2756,25 +2758,25 @@ function AppInner({ isAdmin, onLogout }) {
             </div>
           )
 
-          const getDeficitRecursive = (mId, q, forceExplode) => {
+          const getDeficitRecursive = (mId, q) => {
             const gm = materials.find(m => String(m.id) === String(mId))
             if (!gm) return []
+            
+            const a = assemblies.find(as => String(as.outputMatId) === String(mId))
+            if (a) {
+              const factor = q / (a.outputQty || 1)
+              return a.components.flatMap(ac => getDeficitRecursive(ac.matId, ac.qty * factor))
+            }
             
             // Сануємо екстремальні від'ємні значення (ймовірна корупція даних або ID замість стоку)
             const safeStock = (gm.stock < -1000000) ? 0 : (gm.stock || 0)
             const deficit = Math.max(0, +(q - safeStock).toFixed(2))
             if (deficit <= 0) return []
-            
-            const a = assemblies.find(as => String(as.outputMatId) === String(mId))
-            if (a && forceExplode) {
-              const factor = deficit / a.outputQty
-              return a.components.flatMap(ac => getDeficitRecursive(ac.matId, ac.qty * factor, true))
-            }
 
             return [{ matId: mId, q: deficit }]
           }
 
-          const flattened = tms.flatMap(tm => getDeficitRecursive(tm.matId, tm.perBattery * qty, true))
+          const flattened = tms.flatMap(tm => getDeficitRecursive(tm.matId, tm.perBattery * qty))
           const merged = []
           flattened.forEach(f => {
             const ex = merged.find(m => m.matId == f.matId)
