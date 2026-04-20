@@ -193,6 +193,7 @@ var ACTIONS = {
   updateAssemblyComponent:updateAssemblyComponent,
   removeAssemblyComponent:removeAssemblyComponent,
   saveAssemblyComponents: saveAssemblyComponents,
+  undoAction:             undoAction,
   produceAssembly:        produceAssembly,
   produceAssemblyAdvanced: produceAssemblyAdvanced,
 
@@ -2103,5 +2104,212 @@ function saveRadioStation(station) {
 function deleteRadioStation(id) {
   return deleteRowWhere(SHEET.RADIO, function(r) {
     return String(r[0]) === String(id)
+  })
+}
+
+function undoAction(logId) {
+  return doWithLock(function() {
+    var ss = SpreadsheetApp.getActiveSpreadsheet()
+    var logSh = ss.getSheetByName(SHEET.LOG)
+    var matSh = ss.getSheetByName(SHEET.MATERIALS)
+    var prepSh = ss.getSheetByName(SHEET.PREP)
+    var asmSh = ss.getSheetByName(SHEET.ASSEMBLIES)
+    var actionLogSh = ss.getSheetByName(SHEET.ACTION_LOG)
+
+    var logData = logSh.getDataRange().getValues()
+    var targetRowIdx = -1
+    var targetLog = null
+
+    for (var i = 1; i < logData.length; i++) {
+      if (String(logData[i][0]) === String(logId)) {
+        targetRowIdx = i + 1
+        targetLog = logData[i]
+        break
+      }
+    }
+
+    if (targetRowIdx === -1) return { ok: false, error: 'Запис не знайдено в журналі' }
+
+    // ['id', 'datetime', 'date', 'typeId', 'typeName', 'workerName', 'count', 'serials', 'consumed', 'kind', 'repairNote']
+    var kind = String(targetLog[9] || 'production')
+    var consumedJSON = String(targetLog[8] || '[]')
+    var consumed = []
+    try { consumed = JSON.parse(consumedJSON) } catch(e) {}
+    
+    var count = Number(targetLog[6]) || 0
+    var workerName = String(targetLog[5]) || ''
+    var typeIdOrAsmId = String(targetLog[3]) || '' // for assembly actually id has logId as 'asmL_asmId_time'
+
+    // We need to parse Assembly ID from logId if kind === 'assembly'
+    var isAssembly = kind === 'assembly'
+    var isPrep = kind === 'prep'
+    var isProduction = kind === 'production'
+    var isRepair = kind === 'repair'
+
+    // Step 1: Data extraction for Assembly output (we need to deduct it back)
+    if (isAssembly) {
+      // logId format: asmL_{assemblyId}_{timestamp}
+      var logParts = String(logId).split('_')
+      var asmId = logParts[1]
+      
+      // Determine if it was sent to stock or prep.
+      // 1. Look for this assembly in assemblies to determine outputMatId
+      var asms = asmSh.getDataRange().getValues()
+      var outputMatId = null
+      var defDest = 'stock'
+      for (var a = 1; a < asms.length; a++) {
+        if (String(asms[a][0]) === String(asmId)) {
+          outputMatId = String(asms[a][3])
+          defDest = String(asms[a][8] || 'stock')
+          if (defDest === 'true' || defDest === 'false') defDest = 'stock' // legacy
+          break;
+        }
+      }
+      
+      if (!outputMatId) return { ok: false, error: 'Збірку не знайдено в базі, неможливо скасувати.' }
+
+      // Depending on targetLog[4] "typeName" which holds asmName + optional "(в заготовку)"
+      var typeName = String(targetLog[4]) || ''
+      var sentToPrep = typeName.indexOf('заготовку') !== -1
+
+      if (!sentToPrep) {
+        // Sent to Stock. Check if we can deduct it
+        var matData = matSh.getDataRange().getValues()
+        var mIdx = -1
+        var st = 0
+        for (var m = 1; m < matData.length; m++) {
+          if (String(matData[m][0]) === outputMatId) {
+            mIdx = m
+            st = Number(matData[m][4]) || 0
+            break
+          }
+        }
+        if (mIdx !== -1 && st - count < 0) {
+          return { ok: false, error: 'Ця збірка вже була використана (залишок на складі піде в мінус). Скасування заборонено.' }
+        }
+        if (mIdx !== -1) {
+          matSh.getRange(mIdx+1, 5).setValue(st - count)
+        }
+      } else {
+        // Sent to prepItems. We need to find the specific prepItem and delete it or deduct.
+        // It's usually logged at exact same time with the same worker.
+        var prepData = prepSh.getDataRange().getValues()
+        // [id, workerId, workerName, typeId, matId, matName, unit, qty, returnedQty, ...]
+        var prepIdx = -1
+        for (var p = prepData.length - 1; p >= 1; p--) {
+          if (String(prepData[p][4]) === outputMatId && 
+              String(prepData[p][2]) === workerName &&
+              Number(prepData[p][7]) === count && 
+              String(prepData[p][9]) === String(targetLog[2])) { // matching date
+            
+            var rQty = Number(prepData[p][8]) || 0
+            if (rQty > 0) return { ok: false, error: 'Заготовка з цієї збірки вже частково використана. Скасування заборонено.' }
+            prepIdx = p
+            break
+          }
+        }
+        if (prepIdx === -1) {
+           return { ok: false, error: 'Не знайдено відповідну заготовку для скасування.' }
+        }
+        prepSh.deleteRow(prepIdx + 1)
+      }
+    } 
+    
+    if (isPrep) {
+      // Direct raw prep creation via Add Prep modal
+      // We must delete the prep row. Log format: logId ends with 'P' -> original prepId is logId minus 'P'
+      var origPrepId = String(logId).replace(/P$/, '')
+      var prepData = prepSh.getDataRange().getValues()
+      var foundRow = -1
+      for (var p = 1; p < prepData.length; p++) {
+        if (String(prepData[p][0]) === origPrepId) {
+          var rQ = Number(prepData[p][8]) || 0
+          if (rQ > 0) return { ok: false, error: 'Заготовка вже почала використовуватись. Скасувати неможливо.' }
+          foundRow = p
+          break
+        }
+      }
+      if (foundRow !== -1) {
+        prepSh.deleteRow(foundRow + 1)
+      }
+      // Usually prep also deducts from stock. `consumed` array holds what was consumed from stock.
+    }
+
+    // Now, restore `consumed` materials.
+    // They look like [{matId, fromStock, fromPersonal, fromTeam}] OR basic format for prep [{amount}]
+    if (consumed && consumed.length > 0) {
+      var matData = matSh.getDataRange().getValues()
+      var prepData = prepSh.getDataRange().getValues() 
+      
+      for (var c = 0; c < consumed.length; c++) {
+        var item = consumed[c]
+        var mId = item.matId
+        
+        if (isAssembly || isProduction || isRepair) {
+           // Complex consumed structure
+           var addStock = Number(item.fromStock) || 0
+           var addPers = Number(item.fromPersonal) || 0
+           var addTeam = Number(item.fromTeam) || 0
+
+           // 1. Add back to global stock
+           if (addStock > 0 && mId) {
+             for (var m = 1; m < matData.length; m++) {
+               if (String(matData[m][0]) === String(mId)) {
+                 var st = Number(matData[m][4]) || 0
+                 matSh.getRange(m + 1, 5).setValue(st + addStock)
+                 break
+               }
+             }
+           }
+
+           // 2. Add back to Prep (by DECREASING `returnedQty`)
+           var totalPrepRet = addPers + addTeam
+           if (totalPrepRet > 0 && mId) {
+             for (var p = prepData.length - 1; p >= 1; p--) {
+               if (String(prepData[p][4]) === String(mId)) {
+                  var retQty = Number(prepData[p][8]) || 0
+                  if (retQty > 0) {
+                    // How much can we return to this specific prep?
+                    var canReturnHere = Math.min(retQty, totalPrepRet)
+                    retQty -= canReturnHere
+                    totalPrepRet -= canReturnHere
+                    prepSh.getRange(p + 1, 9).setValue(retQty)
+                    prepData[p][8] = retQty // update local tracker
+                  }
+                  if (totalPrepRet <= 0) break 
+               }
+             }
+           }
+        } else if (isPrep) {
+           // Simple consumed structure for raw PrepItems: [{name, unit, amount}]
+           // Wait, for prep items, it doesn't store matId in the short log! 
+           // BUT it deducts from MAT_ID if we know the matName? 
+           // In produceBatteries: 
+           // prepSh.appendRow([..., gmName])
+           // Actually, the easiest way for prep is to match matName if matId is absent
+           var amt = Number(item.amount) || 0
+           if (amt > 0) {
+             var mName = String(item.name || '')
+             for (var m = 1; m < matData.length; m++) {
+               if (String(matData[m][2]) === mName) { // matName is column 2 (index 2)
+                 var st = Number(matData[m][4]) || 0
+                 matSh.getRange(m + 1, 5).setValue(st + amt)
+                 break
+               }
+             }
+           }
+        }
+      }
+    }
+
+    // Finally, remove the LOG row
+    logSh.deleteRow(targetRowIdx)
+    
+    // Append to action log
+    if (actionLogSh) {
+      logAction(workerName + ' / Адмін', 'undo', 'Скасування дії: ' + kind + ', logId: ' + logId)
+    }
+
+    return { ok: true }
   })
 }

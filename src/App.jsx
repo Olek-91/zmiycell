@@ -2579,6 +2579,19 @@ function AppInner({ isAdmin, onLogout }) {
   }
 
   // ── Журнал ────────────────────────────────────────────────
+  
+  const doUndoAction = (r) => {
+    openConfirm('Скасувати дію?', 
+      <div style={{color: '#fca5a5'}}>Зі складу будуть повернуті матеріали. Переконайтесь, що ніхто вже не використав виготовлені збірки!<br/><br/>Дійсно скасувати?</div>,
+      async () => {
+        const res = await api('undoAction', [r.id])
+        if (!res.ok) return showToast(res.error, 'err')
+        showToast('✓ Дію успішно скасовано')
+        await loadAll()
+      }
+    )
+  }
+
   const PageLog = () => {
     const filteredLog = logShowAll ? log : log.filter(l => l.date === todayStr())
     return wrap(<>
