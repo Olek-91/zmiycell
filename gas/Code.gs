@@ -2247,7 +2247,7 @@ function undoAction(logId) {
         
         if (isAssembly || isProduction || isRepair) {
            // Complex consumed structure
-           var addStock = Number(item.fromStock) || 0
+           var addStock = Number(item.fromStock) || Number(item.amount) || 0
            var addPers = Number(item.fromPersonal) || 0
            var addTeam = Number(item.fromTeam) || 0
 
