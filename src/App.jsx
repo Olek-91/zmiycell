@@ -164,6 +164,12 @@ function BatteryIcon() {
   )
 }
 
+function usePersistentState(key, initialValue) {
+  const [state, setState] = useState(() => localStorage.getItem(key) || initialValue)
+  useEffect(() => { localStorage.setItem(key, state) }, [key, state])
+  return [state, setState]
+}
+
 function Toast({ msg, type }) {
   return <div style={{ position: 'fixed', top: 14, left: 12, right: 12, zIndex: 9999, background: type === 'err' ? '#450a0a' : '#052e16', border: `1px solid ${type === 'err' ? G.rd : G.gn}`, color: type === 'err' ? '#fca5a5' : '#86efac', padding: '13px 16px', borderRadius: 12, fontSize: 13, fontFamily: "'Fira Code',monospace", boxShadow: '0 8px 32px rgba(0,0,0,.7)', animation: 'slideUp .2s ease' }}>{msg}</div>
 }
@@ -662,8 +668,8 @@ function AppInner({ isAdmin, onLogout }) {
   const [prodTab, setProdTab] = useState('writeoff')
   // PageAssembly стан
   const [asmId, setAsmId] = useState('')
-  const [asmQty, setAsmQty] = useState('1')
-  const [asmWorker, setAsmWorker] = useState('')
+  const [asmQty, setAsmQty] = useState(1)
+  const [asmWorker, setAsmWorker] = usePersistentState('zc_asmWorker', '')
   const [asmDate, setAsmDate] = useState(todayStr())
   const [asmDestination, setAsmDestination] = useState('stock') // 'stock' | 'personal' | 'team'
   // Редактор збірок (адмін)
@@ -690,8 +696,8 @@ function AppInner({ isAdmin, onLogout }) {
 
 
   // ── UI стан ──────────────────────────────────────────────
-  const [prodTypeId, setProdTypeId] = useState('')
-  const [prodWorker, setProdWorker] = useState('')
+  const [prodTypeId, setProdTypeId] = usePersistentState('zc_prodTypeId', '')
+  const [prodWorker, setProdWorker] = usePersistentState('zc_prodWorker', '')
   const [prodQty, setProdQty] = useState(1)
   const [prodDate, setProdDate] = useState(todayStr())
   const [prodSerials, setProdSerials] = useState([])
@@ -711,13 +717,13 @@ function AppInner({ isAdmin, onLogout }) {
   const [newTmPerBattery, setNewTmPerBattery] = useState('')
   const [newTmMinStock, setNewTmMinStock] = useState('')
   // PageRepair стан
-  const [repWorker, setRepWorker] = useState('')
+  const [repWorker, setRepWorker] = usePersistentState('zc_repWorker', '')
   const [repDate, setRepDate] = useState(todayStr())
   const [repNote, setRepNote] = useState('')
   const [repPhotoUrl, setRepPhotoUrl] = useState('')
   const [matChecks, setMatChecks] = useState({})
-  const [manTypeId, setManTypeId] = useState('')
-  const [manWorkerId, setManWorkerId] = useState('')
+  const [manTypeId, setManTypeId] = usePersistentState('zc_manTypeId', '')
+  const [manWorkerId, setManWorkerId] = usePersistentState('zc_manWorkerId', '')
   const [manDate, setManDate] = useState(todayStr())
   const [completingId, setCompletingId] = useState(null)
   const [compWorker, setCompWorker] = useState('')
@@ -1049,7 +1055,7 @@ function AppInner({ isAdmin, onLogout }) {
     const type = prodType
     const worker = workers.find(w => w.id === prodWorker)
     if (!type || !worker) return showToast('Оберіть тип та працівника', 'err')
-    const serials = prodSerials.slice(0, prodQty)
+    const serials = Array.from({ length: prodQty }, (_, i) => prodSerials[i] || '')
     for (const s of serials) if (!s?.trim()) return showToast('Введіть всі серійні номери', 'err')
     const consumed = buildConsumed(type, worker.id, prodQty)
     const shortage = consumed.filter(c => c.fromStock > c.totalStock)
