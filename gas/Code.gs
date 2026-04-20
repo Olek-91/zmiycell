@@ -2263,20 +2263,36 @@ function undoAction(logId) {
            }
 
            // 2. Add back to Prep (by DECREASING `returnedQty`)
-           var totalPrepRet = addPers + addTeam
-           if (totalPrepRet > 0 && mId) {
+           if (addPers > 0 && mId) {
              for (var p = prepData.length - 1; p >= 1; p--) {
-               if (String(prepData[p][4]) === String(mId)) {
+               var isPers = String(prepData[p][12]) === 'self' || String(prepData[p][12]) === 'personal' || !prepData[p][12]
+               if (String(prepData[p][4]) === String(mId) && String(prepData[p][2]) === workerName && isPers) {
                   var retQty = Number(prepData[p][8]) || 0
                   if (retQty > 0) {
-                    // How much can we return to this specific prep?
-                    var canReturnHere = Math.min(retQty, totalPrepRet)
+                    var canReturnHere = Math.min(retQty, addPers)
                     retQty -= canReturnHere
-                    totalPrepRet -= canReturnHere
+                    addPers -= canReturnHere
                     prepSh.getRange(p + 1, 9).setValue(retQty)
-                    prepData[p][8] = retQty // update local tracker
+                    prepData[p][8] = retQty
                   }
-                  if (totalPrepRet <= 0) break 
+                  if (addPers <= 0) break 
+               }
+             }
+           }
+           
+           if (addTeam > 0 && mId) {
+             for (var p = prepData.length - 1; p >= 1; p--) {
+               var isTeam = String(prepData[p][12]) === 'team' || String(prepData[p][12]) === 'all'
+               if (String(prepData[p][4]) === String(mId) && isTeam) {
+                  var retQty = Number(prepData[p][8]) || 0
+                  if (retQty > 0) {
+                    var canReturnHere = Math.min(retQty, addTeam)
+                    retQty -= canReturnHere
+                    addTeam -= canReturnHere
+                    prepSh.getRange(p + 1, 9).setValue(retQty)
+                    prepData[p][8] = retQty
+                  }
+                  if (addTeam <= 0) break 
                }
              }
            }
