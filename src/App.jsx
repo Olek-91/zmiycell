@@ -2205,55 +2205,71 @@ function AppInner({ isAdmin, onLogout }) {
     // ── Підтаб: Огляд Збірок ─────────────
     const TabOverview = () => {
       const { counts, workerMap } = useMemo(() => {
-        const counts = {} 
-        const workerMap = {}
-        log.filter(l => l.kind === 'production' && l.count > 0).forEach(l => {
-          counts[l.typeId] = (counts[l.typeId] || 0) + parseFloat(l.count)
+        const c = {} 
+        const wm = {}
+        if (!log) return { counts: c, workerMap: wm }
+        log.filter(l => l && l.kind === 'production' && l.count > 0).forEach(l => {
+          const tid = l.typeId
+          if (!tid) return
+          c[tid] = (c[tid] || 0) + (parseFloat(l.count) || 0)
           if (l.workerName) {
-            if (!workerMap[l.typeId]) workerMap[l.typeId] = {}
-            workerMap[l.typeId][l.workerName] = (workerMap[l.typeId][l.workerName] || 0) + parseFloat(l.count)
+            if (!wm[tid]) wm[tid] = {}
+            wm[tid][l.workerName] = (wm[tid][l.workerName] || 0) + (parseFloat(l.count) || 0)
           }
         })
-        return { counts, workerMap }
+        return { counts: c, workerMap: wm }
       }, [log])
 
       const usedInCounts = useMemo(() => {
         const used = {}
-        const getUsed = (matId) => {
+        const getUsed = (matId, visited = new Set()) => {
+          if (!matId) return 0
           if (used[matId] !== undefined) return used[matId]
+          if (visited.has(String(matId))) return 0 // Loop protection
+          
+          const newVisited = new Set(visited)
+          newVisited.add(String(matId))
+          
           let count = 0
-          assemblies.forEach(a => {
-            const comp = a.components?.find(c => String(c.matId) === String(matId))
-            if (comp) {
-              const parentSelf = counts[a.outputMatId] || 0
-              const parentUsed = getUsed(a.outputMatId)
-              count += comp.qty * (parentSelf + parentUsed)
-            }
-          })
+          if (assemblies) {
+            assemblies.forEach(a => {
+              const comp = a.components?.find(c => String(c.matId) === String(matId))
+              if (comp && a.outputMatId) {
+                const parentSelf = counts[a.outputMatId] || 0
+                const parentUsed = getUsed(a.outputMatId, newVisited)
+                count += (parseFloat(comp.qty) || 0) * (parentSelf + parentUsed)
+              }
+            })
+          }
           used[matId] = count
           return count
         }
-        assemblies.forEach(a => getUsed(a.outputMatId))
+        if (assemblies) {
+          assemblies.forEach(a => { if(a.outputMatId) getUsed(a.outputMatId) })
+        }
         return used
       }, [counts, assemblies])
+
+      if (!assemblies || assemblies.length === 0) return <Card><Center>Збірок ще не створено</Center></Card>
 
       return (
         <Card>
           <CardTitle color={G.pu}>📊 ОГЛЯД ЗБІРОК У ЦЕХУ</CardTitle>
           <div style={{ color: G.t2, fontSize: 13, marginBottom: 12 }}>Загальна кількість зібраних заготовок (незалежно від того, на складі вони чи вже в акумуляторах).</div>
           {assemblies.map(a => {
+            if (!a.outputMatId) return null
             const selfCount = counts[a.outputMatId] || 0
             const usedCount = usedInCounts[a.outputMatId] || 0
             const total = selfCount + usedCount
-            if (total === 0) return null
-            const mat = materials.find(m => m.id === a.outputMatId)
+            if (total <= 0) return null
+            const mat = materials?.find(m => String(m.id) === String(a.outputMatId))
             const wMap = workerMap[a.outputMatId] || {}
             
             return (
               <div key={a.id} style={{ padding: '12px 0', borderBottom: `1px solid ${G.card2}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ fontSize: 15, fontWeight: 700, color: G.t1 }}>{a.name}</div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: G.or }}>{total} шт</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: G.or }}>{+(total.toFixed(2))} шт</div>
                 </div>
                 
                 {Object.keys(wMap).length > 0 && (
@@ -2268,7 +2284,7 @@ function AppInner({ isAdmin, onLogout }) {
 
                 {usedCount > 0 && (
                   <div style={{ fontSize: 12, color: G.t2, marginTop: 6 }}>
-                    З них самостійно: <span style={{color: G.t1}}>{selfCount} шт</span>, вкладено в інші збірки: <span style={{color: G.pu}}>{usedCount} шт</span>.
+                    З них самостійно: <span style={{color: G.t1}}>{+(selfCount.toFixed(2))} шт</span>, вкладено в інші збірки: <span style={{color: G.pu}}>{+(usedCount.toFixed(2))} шт</span>.
                   </div>
                 )}
                 
