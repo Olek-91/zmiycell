@@ -1702,6 +1702,48 @@ function AppInner({ isAdmin, onLogout }) {
   }
   // ── Склад ─────────────────────────────────────────────────
   const PageStock = () => {
+    // Агрегація для вкладки "Огляд" (винесено в корінь PageStock, щоб уникнути помилок Hook Order)
+    const { counts, workerMap } = useMemo(() => {
+      const c = {} 
+      const wm = {}
+      if (!log) return { counts: c, workerMap: wm }
+      log.filter(l => l && l.kind === 'production' && l.count > 0).forEach(l => {
+        const tid = l.typeId
+        if (!tid) return
+        c[tid] = (c[tid] || 0) + (parseFloat(l.count) || 0)
+        if (l.workerName) {
+          if (!wm[tid]) wm[tid] = {}
+          wm[tid][l.workerName] = (wm[tid][l.workerName] || 0) + (parseFloat(l.count) || 0)
+        }
+      })
+      return { counts: c, workerMap: wm }
+    }, [log])
+
+    const usedInCounts = useMemo(() => {
+      const used = {}
+      const getUsed = (matId, visited = new Set()) => {
+        if (!matId) return 0
+        if (used[matId] !== undefined) return used[matId]
+        if (visited.has(String(matId))) return 0 
+        const newVisited = new Set(visited); newVisited.add(String(matId))
+        let count = 0
+        if (assemblies) {
+          assemblies.forEach(a => {
+            const comp = a.components?.find(c => String(c.matId) === String(matId))
+            if (comp && a.outputMatId) {
+              const pSelf = counts[a.outputMatId] || 0
+              const pUsed = getUsed(a.outputMatId, newVisited)
+              count += (parseFloat(comp.qty) || 0) * (pSelf + pUsed)
+            }
+          })
+        }
+        used[matId] = count
+        return count
+      }
+      if (assemblies) assemblies.forEach(a => { if(a.outputMatId) getUsed(a.outputMatId) })
+      return used
+    }, [counts, assemblies])
+
     const filteredMats = materials.filter(m => !stockSearch || m.name.toLowerCase().includes(stockSearch.toLowerCase()))
 
     // ── Підтаб: Матеріали (глобальний склад) ─────────────
@@ -2204,54 +2246,7 @@ function AppInner({ isAdmin, onLogout }) {
 
     // ── Підтаб: Огляд Збірок ─────────────
     const TabOverview = () => {
-      const { counts, workerMap } = useMemo(() => {
-        const c = {} 
-        const wm = {}
-        if (!log) return { counts: c, workerMap: wm }
-        log.filter(l => l && l.kind === 'production' && l.count > 0).forEach(l => {
-          const tid = l.typeId
-          if (!tid) return
-          c[tid] = (c[tid] || 0) + (parseFloat(l.count) || 0)
-          if (l.workerName) {
-            if (!wm[tid]) wm[tid] = {}
-            wm[tid][l.workerName] = (wm[tid][l.workerName] || 0) + (parseFloat(l.count) || 0)
-          }
-        })
-        return { counts: c, workerMap: wm }
-      }, [log])
-
-      const usedInCounts = useMemo(() => {
-        const used = {}
-        const getUsed = (matId, visited = new Set()) => {
-          if (!matId) return 0
-          if (used[matId] !== undefined) return used[matId]
-          if (visited.has(String(matId))) return 0 // Loop protection
-          
-          const newVisited = new Set(visited)
-          newVisited.add(String(matId))
-          
-          let count = 0
-          if (assemblies) {
-            assemblies.forEach(a => {
-              const comp = a.components?.find(c => String(c.matId) === String(matId))
-              if (comp && a.outputMatId) {
-                const parentSelf = counts[a.outputMatId] || 0
-                const parentUsed = getUsed(a.outputMatId, newVisited)
-                count += (parseFloat(comp.qty) || 0) * (parentSelf + parentUsed)
-              }
-            })
-          }
-          used[matId] = count
-          return count
-        }
-        if (assemblies) {
-          assemblies.forEach(a => { if(a.outputMatId) getUsed(a.outputMatId) })
-        }
-        return used
-      }, [counts, assemblies])
-
       if (!assemblies || assemblies.length === 0) return <Card><Center>Збірок ще не створено</Center></Card>
-
       return (
         <Card>
           <CardTitle color={G.pu}>📊 ОГЛЯД ЗБІРОК У ЦЕХУ</CardTitle>
@@ -2264,14 +2259,12 @@ function AppInner({ isAdmin, onLogout }) {
             if (total <= 0) return null
             const mat = materials?.find(m => String(m.id) === String(a.outputMatId))
             const wMap = workerMap[a.outputMatId] || {}
-            
             return (
               <div key={a.id} style={{ padding: '12px 0', borderBottom: `1px solid ${G.card2}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ fontSize: 15, fontWeight: 700, color: G.t1 }}>{a.name}</div>
                   <div style={{ fontSize: 16, fontWeight: 700, color: G.or }}>{+(total.toFixed(2))} шт</div>
                 </div>
-                
                 {Object.keys(wMap).length > 0 && (
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
                     {Object.entries(wMap).map(([wName, qty]) => (
@@ -2281,13 +2274,11 @@ function AppInner({ isAdmin, onLogout }) {
                     ))}
                   </div>
                 )}
-
                 {usedCount > 0 && (
                   <div style={{ fontSize: 12, color: G.t2, marginTop: 6 }}>
                     З них самостійно: <span style={{color: G.t1}}>{+(selfCount.toFixed(2))} шт</span>, вкладено в інші збірки: <span style={{color: G.pu}}>{+(usedCount.toFixed(2))} шт</span>.
                   </div>
                 )}
-                
                 {mat && (
                   <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center' }}>
                     <StockBadge m={mat} />
