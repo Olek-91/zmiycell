@@ -3562,7 +3562,7 @@ function AppInner({ isAdmin, onLogout }) {
     </div>
 
     {toast && <Toast {...toast} />}
-    {modal?.type === 'confirm' && <ConfirmModal title={modal.title} body={modal.body} onYes={modal.onYes} onNo={closeModal} />}
+    {modal?.type === 'confirm' && <ConfirmModal title={modal.title} body={modal.body} onYes={() => { const cb = modal.onYes; closeModal(); if (cb) cb(); }} onNo={closeModal} />}
     {modal?.type === 'input' && <InputModal title={modal.title} placeholder={modal.placeholder} defaultValue={modal.defaultVal} onConfirm={modal.onConfirm} onCancel={closeModal} />}
     {modal?.type === 'history' && <Modal onClose={closeModal}>{HistoryModal({ mat: modal.mat, entries: modal.entries })}</Modal>}
     <SnakeCubeLoader sync={sync} logoRef={headerLogoRef} />
