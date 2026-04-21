@@ -2125,7 +2125,9 @@ function undoAction(logId) {
       }
     }
 
-    if (targetRowIdx === -1) return { ok: false, error: 'Запис не знайдено в журналі' }
+    if (targetRowIdx === -1) {
+       return { ok: false, error: 'Запис з ID "' + logId + '" не знайдено в журналі (всього рядків: ' + logData.length + ')' }
+    }
 
     // ['id', 'datetime', 'date', 'typeId', 'typeName', 'workerName', 'count', 'serials', 'consumed', 'kind', 'repairNote']
     var kind = String(targetLog[9] || 'production')
