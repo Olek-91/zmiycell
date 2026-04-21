@@ -656,12 +656,13 @@ function AppInner({ isAdmin, onLogout }) {
     ['stock',      '📦', 'СКЛАД'],
     ['calculator', '🧮', 'КАЛЬК.'],
     ['tools',      '🛠', 'ІНСТР.'],
+    ['log',        '📋', 'ЖУРН.'],
     ['radio',      '📻', 'РАДІО'],
   ]
   const USER_NAV_GROUPS = [
     { key: 'prod',  icon: '🔋', label: 'ВИРОБН.', keys: ['prod', 'repair', 'manual'] },
     { key: 'stock', icon: '📦', label: 'СКЛАД',   keys: ['stock', 'calculator', 'tools'] },
-    { key: 'other', icon: '📻', label: 'ІНШЕ',    keys: ['radio'] },
+    { key: 'other', icon: '📻', label: 'ІНШЕ',    keys: ['log', 'radio'] },
   ]
   const NAV = isAdmin ? ALL_NAV : USER_NAV
   const NAV_GROUPS = isAdmin ? ALL_NAV_GROUPS : USER_NAV_GROUPS
