@@ -654,11 +654,13 @@ function AppInner({ isAdmin, onLogout }) {
     ['repair',     '🔧', 'РЕМ.'],
     ['manual',     '📖', 'МАНУАЛ'],
     ['stock',      '📦', 'СКЛАД'],
+    ['calculator', '🧮', 'КАЛЬК.'],
+    ['tools',      '🛠', 'ІНСТР.'],
     ['radio',      '📻', 'РАДІО'],
   ]
   const USER_NAV_GROUPS = [
     { key: 'prod',  icon: '🔋', label: 'ВИРОБН.', keys: ['prod', 'repair', 'manual'] },
-    { key: 'stock', icon: '📦', label: 'СКЛАД',   keys: ['stock'] },
+    { key: 'stock', icon: '📦', label: 'СКЛАД',   keys: ['stock', 'calculator', 'tools'] },
     { key: 'other', icon: '📻', label: 'ІНШЕ',    keys: ['radio'] },
   ]
   const NAV = isAdmin ? ALL_NAV : USER_NAV
@@ -1709,10 +1711,13 @@ function AppInner({ isAdmin, onLogout }) {
       if (!log) return { counts: c, workerMap: wm }
       log.filter(l => l && l.count > 0 && (l.kind === 'production' || l.kind === 'assembly')).forEach(l => {
         let tid = l.typeId
-        // Якщо це збірка (assembly), ID збірки закодовано в l.id як "asmL_ID_..."
         if (l.kind === 'assembly' && l.id && l.id.startsWith('asmL_')) {
           const parts = l.id.split('_')
-          if (parts.length >= 2) tid = parts[1]
+          if (parts.length >= 2) {
+            const aid = parts[1]
+            const asm = assemblies.find(a => String(a.id) === String(aid))
+            if (asm) tid = asm.outputMatId
+          }
         }
         
         if (!tid) return
@@ -1723,7 +1728,7 @@ function AppInner({ isAdmin, onLogout }) {
         }
       })
       return { counts: c, workerMap: wm }
-    }, [log])
+    }, [log, assemblies])
 
     const usedInCounts = useMemo(() => {
       const used = {}
