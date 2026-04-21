@@ -2150,7 +2150,8 @@ function undoAction(logId) {
     if (isAssembly) {
       // logId format: asmL_{assemblyId}_{timestamp}
       var logParts = String(logId).split('_')
-      var asmId = logParts[1]
+      // Assembly ID may contain underscores (e.g. asm_123), so we take everything between 'asmL' and 'timestamp'
+      var asmId = logParts.slice(1, -1).join('_')
       
       // Determine if it was sent to stock or prep.
       // 1. Look for this assembly in assemblies to determine outputMatId
