@@ -1963,7 +1963,6 @@ function saveStockBackup(user) {
   var headers = rows[0]
   var idIdx=0, nameIdx=1, unitIdx=2, stockIdx=3
 
-  // Find columns by header name
   headers.forEach(function(h, i) {
     if (h === 'id') idIdx = i
     else if (h === 'name') nameIdx = i
@@ -1972,8 +1971,6 @@ function saveStockBackup(user) {
   })
 
   var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd.MM.yyyy HH:mm')
-
-  // Clear and rewrite backup
   bakSh.clearContents()
   bakSh.appendRow(['matId', 'name', 'unit', 'stock', 'snapshotDate'])
   rows.slice(1).forEach(function(r) {
@@ -2004,7 +2001,6 @@ function getBackupDiff() {
     else if (h === 'stock') stockIdx = i
   })
 
-  // Build backup map
   var bakMap = {}
   var snapshotDate = ''
   bakRows.slice(1).forEach(function(r) {
@@ -2023,6 +2019,7 @@ function getBackupDiff() {
 
   return { ok: true, rows: result, snapshotDate }
 }
+
 
 function restoreFromBackup(user) {
   var ss = SpreadsheetApp.getActiveSpreadsheet()
@@ -2181,7 +2178,7 @@ function undoAction(logId) {
         for (var m = 1; m < matData.length; m++) {
           if (String(matData[m][0]) === outputMatId) {
             mIdx = m
-            st = Number(matData[m][4]) || 0
+            st = Number(matData[m][3]) || 0
             break
           }
         }
@@ -2189,7 +2186,7 @@ function undoAction(logId) {
           return { ok: false, error: 'Ця збірка вже була використана (залишок на складі піде в мінус). Скасування заборонено.' }
         }
         if (mIdx !== -1) {
-          matSh.getRange(mIdx+1, 5).setValue(st - count)
+          matSh.getRange(mIdx+1, 4).setValue(+(st - count).toFixed(2))
         }
       } else {
         // Sent to prepItems. We need to find the specific prepItem and delete it or deduct.
@@ -2256,8 +2253,8 @@ function undoAction(logId) {
            if (addStock > 0 && mId) {
              for (var m = 1; m < matData.length; m++) {
                if (String(matData[m][0]) === String(mId)) {
-                 var st = Number(matData[m][4]) || 0
-                 matSh.getRange(m + 1, 5).setValue(st + addStock)
+                 var st = Number(matData[m][3]) || 0
+                 matSh.getRange(m + 1, 4).setValue(+(st + addStock).toFixed(2))
                  break
                }
              }
@@ -2308,9 +2305,9 @@ function undoAction(logId) {
            if (amt > 0) {
              var mName = String(item.name || '')
              for (var m = 1; m < matData.length; m++) {
-               if (String(matData[m][2]) === mName) { // matName is column 2 (index 2)
-                 var st = Number(matData[m][4]) || 0
-                 matSh.getRange(m + 1, 5).setValue(st + amt)
+               if (String(matData[m][1]) === mName) { // matName is column 2 (index 1)
+                 var st = Number(matData[m][3]) || 0
+                 matSh.getRange(m + 1, 4).setValue(+(st + amt).toFixed(2))
                  break
                }
              }
