@@ -2108,7 +2108,7 @@ function deleteRadioStation(id) {
 }
 
 function undoAction(logId) {
-  return doWithLock(function() {
+  return withLock(function() {
     var ss = SpreadsheetApp.getActiveSpreadsheet()
     var logSh = ss.getSheetByName(SHEET.LOG)
     var matSh = ss.getSheetByName(SHEET.MATERIALS)
