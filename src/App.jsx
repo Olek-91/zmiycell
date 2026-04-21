@@ -654,15 +654,12 @@ function AppInner({ isAdmin, onLogout }) {
     ['repair',     '🔧', 'РЕМ.'],
     ['manual',     '📖', 'МАНУАЛ'],
     ['stock',      '📦', 'СКЛАД'],
-    ['calculator', '🧮', 'КАЛЬК.'],
-    ['tools',      '🛠', 'ІНСТР.'],
-    ['log',        '📋', 'ЖУРН.'],
     ['radio',      '📻', 'РАДІО'],
   ]
   const USER_NAV_GROUPS = [
     { key: 'prod',  icon: '🔋', label: 'ВИРОБН.', keys: ['prod', 'repair', 'manual'] },
-    { key: 'stock', icon: '📦', label: 'СКЛАД',   keys: ['stock', 'calculator', 'tools'] },
-    { key: 'other', icon: '📻', label: 'ІНШЕ',    keys: ['log', 'radio'] },
+    { key: 'stock', icon: '📦', label: 'СКЛАД',   keys: ['stock'] },
+    { key: 'other', icon: '📻', label: 'ІНШЕ',    keys: ['radio'] },
   ]
   const NAV = isAdmin ? ALL_NAV : USER_NAV
   const NAV_GROUPS = isAdmin ? ALL_NAV_GROUPS : USER_NAV_GROUPS
@@ -2205,9 +2202,100 @@ function AppInner({ isAdmin, onLogout }) {
       </>
     }
 
+    // ── Підтаб: Огляд Збірок ─────────────
+    const TabOverview = () => {
+      const { counts, workerMap } = useMemo(() => {
+        const counts = {} 
+        const workerMap = {}
+        log.filter(l => l.kind === 'production' && l.count > 0).forEach(l => {
+          counts[l.typeId] = (counts[l.typeId] || 0) + parseFloat(l.count)
+          if (l.workerName) {
+            if (!workerMap[l.typeId]) workerMap[l.typeId] = {}
+            workerMap[l.typeId][l.workerName] = (workerMap[l.typeId][l.workerName] || 0) + parseFloat(l.count)
+          }
+        })
+        return { counts, workerMap }
+      }, [log])
+
+      const usedInCounts = useMemo(() => {
+        const used = {}
+        const getUsed = (matId) => {
+          if (used[matId] !== undefined) return used[matId]
+          let count = 0
+          assemblies.forEach(a => {
+            const comp = a.components?.find(c => String(c.matId) === String(matId))
+            if (comp) {
+              const parentSelf = counts[a.outputMatId] || 0
+              const parentUsed = getUsed(a.outputMatId)
+              count += comp.qty * (parentSelf + parentUsed)
+            }
+          })
+          used[matId] = count
+          return count
+        }
+        assemblies.forEach(a => getUsed(a.outputMatId))
+        return used
+      }, [counts, assemblies])
+
+      return (
+        <Card>
+          <CardTitle color={G.pu}>📊 ОГЛЯД ЗБІРОК У ЦЕХУ</CardTitle>
+          <div style={{ color: G.t2, fontSize: 13, marginBottom: 12 }}>Загальна кількість зібраних заготовок (незалежно від того, на складі вони чи вже в акумуляторах).</div>
+          {assemblies.map(a => {
+            const selfCount = counts[a.outputMatId] || 0
+            const usedCount = usedInCounts[a.outputMatId] || 0
+            const total = selfCount + usedCount
+            if (total === 0) return null
+            const mat = materials.find(m => m.id === a.outputMatId)
+            const wMap = workerMap[a.outputMatId] || {}
+            
+            return (
+              <div key={a.id} style={{ padding: '12px 0', borderBottom: `1px solid ${G.card2}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: G.t1 }}>{a.name}</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: G.or }}>{total} шт</div>
+                </div>
+                
+                {Object.keys(wMap).length > 0 && (
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+                    {Object.entries(wMap).map(([wName, qty]) => (
+                      <span key={wName} style={{ fontSize: 11, background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: 6, color: getWorkerColor(wName) }}>
+                        {wName}: {qty}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {usedCount > 0 && (
+                  <div style={{ fontSize: 12, color: G.t2, marginTop: 6 }}>
+                    З них самостійно: <span style={{color: G.t1}}>{selfCount} шт</span>, вкладено в інші збірки: <span style={{color: G.pu}}>{usedCount} шт</span>.
+                  </div>
+                )}
+                
+                {mat && (
+                  <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center' }}>
+                    <StockBadge m={mat} />
+                    <span style={{ fontSize: 12, color: G.cy, fontWeight: 600 }}>На складі: {mat.stock} {mat.unit}</span>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </Card>
+      )
+    }
+
+    const stockTabs = isAdmin 
+      ? [['materials', '📦 МАТЕРІАЛИ'], ['overview', '📊 ОГЛЯД'], ['types', '🔋 ТИПИ БАТАРЕЙ'], ['assemblies', '⚙️ НАЛАШТ.']]
+      : [['materials', '📦 МАТЕРІАЛИ'], ['overview', '📊 ОГЛЯД']];
+    
+    if (!isAdmin && (stockTab === 'types' || stockTab === 'assemblies')) {
+      setTimeout(() => setStockTab('materials'), 0);
+    }
+
     return wrap(<>
-      <SubTabs tabs={[['materials', '📦 МАТЕРІАЛИ'], ['types', '🔋 ТИПИ БАТАРЕЙ'], ['assemblies', '⚙️ ЗБІРКИ']]} active={stockTab} onChange={setStockTab} />
-      {stockTab === 'materials' ? TabMaterials() : stockTab === 'types' ? TabTypes() : TabAssemblies()}
+      <SubTabs tabs={stockTabs} active={stockTab} onChange={setStockTab} />
+      {stockTab === 'materials' ? TabMaterials() : stockTab === 'overview' ? TabOverview() : stockTab === 'types' ? TabTypes() : TabAssemblies()}
     </>)
   }
   // ── Ремонт ────────────────────────────────────────────────
