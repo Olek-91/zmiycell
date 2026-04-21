@@ -27,7 +27,20 @@ textarea{resize:vertical;min-height:80px}
 input:focus,select:focus,textarea:focus{border-color:#f97316}
 select option{background:#1f2937}
 html,body{height:100%;height:100dvh;margin:0;background:#0a0f1a url('/logo.jpg') center center / cover no-repeat fixed; overflow-x: hidden; width: 100%;}
-#root{height:100%;height:100dvh;width: 100%; display:flex;flex-direction:column;background:rgba(10,15,26,0.88);position:relative;overflow:hidden;}
+#root{
+  height:100%; height:100dvh; width: 100%; 
+  display:flex; flex-direction:column; 
+  background:rgba(10,15,26,0.92); position:relative; overflow:hidden;
+}
+@media (min-width: 850px) {
+  #root {
+    max-width: 600px;
+    margin: 0 auto;
+    border-left: 1px solid #1f2937;
+    border-right: 1px solid #1f2937;
+    box-shadow: 0 0 150px rgba(0,0,0,0.8);
+  }
+}
 .page-scroll{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;transition:transform 0.15s ease-out; width: 100%;}
 .tab-nav::-webkit-scrollbar{display:none;}
 .tab-nav{scrollbar-width:none;}
@@ -363,7 +376,7 @@ function AuthScreen({ onAuth }) {
   }
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'rgba(10,15,26,0.97)' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', paddingTop: '10vh', paddingLeft: 24, paddingRight: 24, background: 'rgba(10,15,26,0.97)', width: '100%' }}>
       <Logo size={64} />
       <div style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 32, fontWeight: 800, letterSpacing: 3, marginTop: 12, marginBottom: 32, color: G.or }}>ZmiyCell</div>
       {!mode ? (
