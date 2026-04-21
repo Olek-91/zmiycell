@@ -1707,8 +1707,14 @@ function AppInner({ isAdmin, onLogout }) {
       const c = {} 
       const wm = {}
       if (!log) return { counts: c, workerMap: wm }
-      log.filter(l => l && l.kind === 'production' && l.count > 0).forEach(l => {
-        const tid = l.typeId
+      log.filter(l => l && l.count > 0 && (l.kind === 'production' || l.kind === 'assembly')).forEach(l => {
+        let tid = l.typeId
+        // Якщо це збірка (assembly), ID збірки закодовано в l.id як "asmL_ID_..."
+        if (l.kind === 'assembly' && l.id && l.id.startsWith('asmL_')) {
+          const parts = l.id.split('_')
+          if (parts.length >= 2) tid = parts[1]
+        }
+        
         if (!tid) return
         c[tid] = (c[tid] || 0) + (parseFloat(l.count) || 0)
         if (l.workerName) {
