@@ -1705,11 +1705,20 @@ function AppInner({ isAdmin, onLogout }) {
   }
   // ── Склад ─────────────────────────────────────────────────
   const PageStock = () => {
-    // Агрегація для вкладки "Огляд" (винесено в корінь PageStock, щоб уникнути помилок Hook Order)
-    const { counts, workerMap } = useMemo(() => {
-      const c = {} 
+    // Агрегація для вкладки "Огляд" (на основі поточного складу)
+    const counts = useMemo(() => {
+      const c = {}
+      if (!materials) return c
+      materials.forEach(m => {
+        c[m.id] = parseFloat(m.stock) || 0
+      })
+      return c
+    }, [materials])
+
+    // Статистика працівників (історична)
+    const workerMap = useMemo(() => {
       const wm = {}
-      if (!log) return { counts: c, workerMap: wm }
+      if (!log) return wm
       log.filter(l => l && l.count > 0 && (l.kind === 'production' || l.kind === 'assembly')).forEach(l => {
         let tid = l.typeId
         if (l.kind === 'assembly' && l.id && l.id.startsWith('asmL_')) {
@@ -1720,15 +1729,11 @@ function AppInner({ isAdmin, onLogout }) {
             if (asm) tid = asm.outputMatId
           }
         }
-        
         if (!tid) return
-        c[tid] = (c[tid] || 0) + (parseFloat(l.count) || 0)
-        if (l.workerName) {
-          if (!wm[tid]) wm[tid] = {}
-          wm[tid][l.workerName] = (wm[tid][l.workerName] || 0) + (parseFloat(l.count) || 0)
-        }
+        if (!wm[tid]) wm[tid] = {}
+        wm[tid][l.workerName] = (wm[tid][l.workerName] || 0) + (parseFloat(l.count) || 0)
       })
-      return { counts: c, workerMap: wm }
+      return wm
     }, [log, assemblies])
 
     const usedInCounts = useMemo(() => {
@@ -2259,42 +2264,51 @@ function AppInner({ isAdmin, onLogout }) {
     // ── Підтаб: Огляд Збірок ─────────────
     const TabOverview = () => {
       if (!assemblies || assemblies.length === 0) return <Card><Center>Збірок ще не створено</Center></Card>
+      
+      const assemblyMats = assemblies.map(a => a.outputMatId)
+      const visibleAssemblies = assemblies.filter(a => {
+        const total = (counts[a.outputMatId] || 0) + (usedInCounts[a.outputMatId] || 0)
+        return total > 0
+      })
+
+      if (visibleAssemblies.length === 0) return <Card><Center>На складі немає готових збірок</Center></Card>
+
       return (
         <Card>
-          <CardTitle color={G.pu}>📊 ОГЛЯД ЗБІРОК У ЦЕХУ</CardTitle>
-          <div style={{ color: G.t2, fontSize: 13, marginBottom: 12 }}>Загальна кількість зібраних заготовок (незалежно від того, на складі вони чи вже в акумуляторах).</div>
-          {assemblies.map(a => {
-            if (!a.outputMatId) return null
-            const selfCount = counts[a.outputMatId] || 0
+          <CardTitle color={G.pu}>📊 ОГЛЯД ЗБІРОК (НА СКЛАДІ)</CardTitle>
+          <div style={{ color: G.t2, fontSize: 13, marginBottom: 12 }}>Відображається кількість збірок, що зараз є на складі (враховуючи ті, що вкладені в інші вироби).</div>
+          {visibleAssemblies.map(a => {
+            const selfStock = counts[a.outputMatId] || 0
             const usedCount = usedInCounts[a.outputMatId] || 0
-            const total = selfCount + usedCount
-            if (total <= 0) return null
+            const total = selfStock + usedCount
             const mat = materials?.find(m => String(m.id) === String(a.outputMatId))
             const wMap = workerMap[a.outputMatId] || {}
+            
             return (
               <div key={a.id} style={{ padding: '12px 0', borderBottom: `1px solid ${G.card2}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ fontSize: 15, fontWeight: 700, color: G.t1 }}>{a.name}</div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: G.or }}>{+(total.toFixed(2))} шт</div>
+                  <div style={{ fontSize: 17, fontWeight: 800, color: G.or }}>{+(total.toFixed(2))} шт</div>
                 </div>
+                
+                <div style={{ fontSize: 12, color: G.t2, marginTop: 4 }}>
+                  {usedCount > 0 ? (
+                    <>В наявності: <span style={{color: G.t1}}>{+(selfStock.toFixed(2))} шт</span> + вкладено в інше: <span style={{color: G.pu}}>{+(usedCount.toFixed(2))} шт</span></>
+                  ) : (
+                    <>В наявності на складі</>
+                  )}
+                </div>
+
                 {Object.keys(wMap).length > 0 && (
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
-                    {Object.entries(wMap).map(([wName, qty]) => (
-                      <span key={wName} style={{ fontSize: 11, background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: 6, color: getWorkerColor(wName) }}>
-                        {wName}: {qty}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                {usedCount > 0 && (
-                  <div style={{ fontSize: 12, color: G.t2, marginTop: 6 }}>
-                    З них самостійно: <span style={{color: G.t1}}>{+(selfCount.toFixed(2))} шт</span>, вкладено в інші збірки: <span style={{color: G.pu}}>{+(usedCount.toFixed(2))} шт</span>.
-                  </div>
-                )}
-                {mat && (
-                  <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center' }}>
-                    <StockBadge m={mat} />
-                    <span style={{ fontSize: 12, color: G.cy, fontWeight: 600 }}>На складі: {mat.stock} {mat.unit}</span>
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ fontSize: 10, color: G.t2, marginBottom: 4, textTransform: 'uppercase' }}>Хто виготовляв (всього):</div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {Object.entries(wMap).map(([wName, qty]) => (
+                        <span key={wName} style={{ fontSize: 10, background: 'rgba(255,255,255,0.03)', padding: '2px 6px', borderRadius: 6, color: getWorkerColor(wName), border: '1px solid rgba(255,255,255,0.05)' }}>
+                          {wName}: {qty}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
