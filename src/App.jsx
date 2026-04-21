@@ -20,6 +20,7 @@ const GLOBAL_CSS = `
 @keyframes slideUp{from{transform:translateY(10px);opacity:0}to{transform:translateY(0);opacity:1}}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes blinkSlow{0%,100%{opacity:1}50%{opacity:0.3}}
 input,select,textarea{background:#0f172a;border:1px solid #374151;color:#e5e7eb;border-radius:8px;padding:8px 12px;font-family:'Fira Code',monospace;font-size:14px;outline:none;width:100%;transition:border-color .15s}
 input[type="radio"], input[type="checkbox"]{width:auto;padding:0;background:transparent;border:none}
 textarea{resize:vertical;min-height:80px}
@@ -120,45 +121,53 @@ function SyncBadge({ state }) {
 function BatteryIcon() {
   const [now, setNow] = useState(new Date())
   useEffect(() => {
-    const itv = setInterval(() => setNow(new Date()), 250)
+    const itv = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(itv)
   }, [])
 
   const h = now.getHours()
   const m = now.getMinutes()
-  const s = now.getSeconds()
   const t = h + m / 60
+  
+  const WORK_START = 8
+  const WORK_END = 17
 
   let sections = 0
   let color = G.gn
-  let pulse = false
-  let charging = false
-
-  if (t >= 7 && t < 17) {
-    const pct = Math.max(0, 100 - (t - 7) * 10)
-    sections = Math.ceil(pct / 20)
-    if (sections <= 2) { color = G.rd; pulse = true }
+  let isWorkTime = t >= WORK_START && t < WORK_END
+  
+  if (!isWorkTime) {
+    let adjT = t < WORK_START ? t + 24 : t
+    const chargingProgress = (adjT - WORK_END) / (24 - WORK_END + WORK_START)
+    sections = Math.max(1, Math.ceil(5 * chargingProgress))
+    color = G.cy
   } else {
-    charging = true
-    sections = (Math.floor(Date.now() / 1000) % 6)
+    const workProgress = (t - WORK_START) / (WORK_END - WORK_START)
+    sections = Math.max(1, Math.ceil(5 * (1 - workProgress)))
+    if (sections <= 1) color = G.rd
   }
 
   return (
     <div style={{
-      width: '100%', height: 20, border: `1.5px solid ${G.t2}`, borderRadius: 5,
-      position: 'relative', padding: 2, display: 'flex', gap: 1.5,
-      animation: pulse ? 'pulse 1s infinite' : 'none', opacity: 0.9
+      width: '100%', height: 20, border: `1.5px solid ${G.t2}`, borderRadius: 6,
+      position: 'relative', padding: 2, display: 'flex', gap: 2.5,
+      opacity: 0.9, background: 'rgba(0,0,0,0.2)'
     }}>
-      {[1, 2, 3, 4, 5].map(i => (
-        <div key={i} style={{
-          flex: 1, height: '100%', borderRadius: 1.5,
-          background: i <= sections ? color : 'transparent',
-          transition: 'background 0.3s'
-        }} />
-      ))}
+      {[1, 2, 3, 4, 5].map(i => {
+        const isActive = i <= sections
+        const isLastFilled = i === sections
+        return (
+          <div key={i} style={{
+            flex: 1, height: '100%', borderRadius: 1.5,
+            background: isActive ? color : 'transparent',
+            transition: 'background 0.4s',
+            animation: (isLastFilled && !isWorkTime) ? 'blinkSlow 1.5s infinite' : 'none'
+          }} />
+        )
+      })}
       <div style={{
-        position: 'absolute', right: -5, top: 4, width: 2.5, height: 9,
-        background: G.t2, borderRadius: '0 1.5px 1.5px 0'
+        position: 'absolute', right: -5, top: 4, width: 3, height: 9,
+        background: G.t2, borderRadius: '0 2px 2px 0'
       }} />
     </div>
   )
