@@ -34,7 +34,7 @@ html,body{height:100%;height:100dvh;margin:0;background:#0a0f1a url('/logo.jpg')
 }
 @media (min-width: 850px) {
   #root {
-    max-width: 600px;
+    max-width: 800px;
     margin: 0 auto;
     border-left: 1px solid #1f2937;
     border-right: 1px solid #1f2937;
@@ -661,7 +661,7 @@ function AppInner({ isAdmin, onLogout }) {
     { key: 'prod',   icon: '🔋', label: 'ВИРОБН.', keys: ['prod', 'repair', 'manual'] },
     { key: 'stock',  icon: '📦', label: 'СКЛАД',   keys: ['stock', 'calculator', 'shopping', 'tools'] },
     { key: 'report', icon: '📊', label: 'ЗВІТ.',   keys: ['log', 'actlog', 'backup'] },
-    { key: 'team',   icon: '👥', label: 'ІНШЕ',    keys: ['workers', 'radio'] },
+    { key: 'team',   icon: '👥', label: 'ІНШЕ',    keys: ['calendar', 'workers', 'radio'] },
   ]
   const USER_NAV = [
     ['prod',       '⚙️',  'ВИР.'],
@@ -677,7 +677,7 @@ function AppInner({ isAdmin, onLogout }) {
   const USER_NAV_GROUPS = [
     { key: 'prod',  icon: '🔋', label: 'ВИРОБН.', keys: ['prod', 'repair', 'manual'] },
     { key: 'stock', icon: '📦', label: 'СКЛАД',   keys: ['stock', 'calculator', 'tools'] },
-    { key: 'other', icon: '📻', label: 'ІНШЕ',    keys: ['log', 'radio'] },
+    { key: 'other', icon: '📻', label: 'ІНШЕ',    keys: ['calendar', 'log', 'radio'] },
   ]
   const NAV = isAdmin ? ALL_NAV : USER_NAV
   const NAV_GROUPS = isAdmin ? ALL_NAV_GROUPS : USER_NAV_GROUPS
