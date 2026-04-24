@@ -3041,6 +3041,17 @@ function AppInner({ isAdmin, onLogout }) {
       const w = { id: 'w' + uid(), name: newName.trim() }
       api('saveWorker', [w]).then(() => { setWorkers(p => [...p, w]); setNewName(''); showToast('✓ Додано ' + w.name) }).catch(() => { })
     }
+    const addDebt = (w) => openInput('Додати борг (неоплачені акум.)', 'напр. 5', '', async (val) => {
+      closeModal()
+      const cnt = parseInt(val)
+      if (!cnt || cnt <= 0) return showToast('Невірна кількість', 'err')
+      const entry = { id: uid(), workerId: w.id, workerName: w.name, count: -cnt, date: todayStr(), datetime: nowStr() }
+      try {
+        await api('addPayment', [entry])
+        setPayments(prev => [entry, ...prev])
+        showToast(`✓ Додано борг: ${cnt} для ${w.name}`)
+      } catch { }
+    })
     const addPayment = (w) => openInput('Оплачено (кількість)', 'напр. 5', '', async (val) => {
       closeModal()
       const cnt = parseInt(val)
