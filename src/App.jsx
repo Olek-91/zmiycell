@@ -3451,36 +3451,39 @@ function AppInner({ isAdmin, onLogout }) {
 
 
 
+
   // ── Календар ──────────────────────────────────────────────
   const PageCalendar = () => {
     const [currentDate, setCurrentDate] = useState(() => new Date())
     const [selectedDateStr, setSelectedDateStr] = useState(null)
 
-    // Максимально надійна нормалізація дати
-    const norm = (str) => {
-      if (!str) return ''
+    // Максимально гнучка нормалізація
+    const norm = (val) => {
+      if (!val) return ''
       try {
-        // Беремо лише першу частину (до пробілу чи коми), щоб відсікти час
-        const first = str.toString().trim().split(',')[0].split(' ')[0]
-        const clean = first.replace(/[^0-9./-]/g, '')
-        const p = clean.split(/[./-]/)
-        if (p.length < 3) return clean.slice(0, 10)
-        
         let d, m, y;
-        // Формат YYYY-MM-DD
-        if (p[0].length === 4) {
-          y = p[0]; m = p[1]; d = p[2];
+        if (val instanceof Date) {
+          d = val.getDate(); m = val.getMonth() + 1; y = val.getFullYear();
         } else {
-          // Формат DD.MM.YYYY
-          d = p[0]; m = p[1]; y = p[2];
+          const s = val.toString().trim()
+          // ISO формат (2026-04-23T...)
+          if (s.length > 10 && s.includes('-') && s.includes('T')) {
+            const dt = new Date(s)
+            if (!isNaN(dt)) { d = dt.getDate(); m = dt.getMonth() + 1; y = dt.getFullYear(); }
+          }
+          if (!d) {
+            // Звичайна стрічка
+            const first = s.split(',')[0].split(' ')[0]
+            const clean = first.replace(/[^0-9./-]/g, '')
+            const p = clean.split(/[./-]/)
+            if (p.length >= 3) {
+              if (p[0].length === 4) { [y, m, d] = p } else { [d, m, y] = p }
+            }
+          }
         }
-        
-        const dd = d.padStart(2, '0').slice(0, 2)
-        const mm = m.padStart(2, '0').slice(0, 2)
-        let yyyy = y.toString()
-        if (yyyy.length === 2) yyyy = '20' + yyyy
-        return `${dd}.${mm}.${yyyy.slice(0, 4)}`
-      } catch(e) { return str.toString().slice(0, 10) }
+        if (!d || !m || !y) return val.toString().trim().slice(0, 10)
+        return `${d.toString().padStart(2, '0')}.${m.toString().padStart(2, '0')}.${y.toString().length === 2 ? '20' + y : y.toString().slice(0, 4)}`
+      } catch(e) { return val.toString().slice(0, 10) }
     }
 
     const getSArr = (l) => {
@@ -3626,8 +3629,8 @@ function AppInner({ isAdmin, onLogout }) {
             )
           })}
         </div>
-        {isAdmin && <div style={{marginTop: 8, fontSize: 8, opacity: 0.3, color: G.t2}}>
-          Dbg: {prodLogs.slice(0,2).map(l => `[${l.date}]->${norm(l.date)}`).join(' | ')}
+        {isAdmin && <div style={{marginTop: 8, fontSize: 8, opacity: 0.3, color: G.t2, overflow: 'hidden', whiteSpace: 'nowrap'}}>
+          Keys: {Object.keys(logsByDate).sort().slice(0,10).join(', ')}
         </div>}
       </Card>
 
@@ -3642,6 +3645,7 @@ function AppInner({ isAdmin, onLogout }) {
             <div style={{textAlign:'center', padding:20}}>
               <div style={{color:G.t2, marginBottom:10}}>В цей день не було виробництва ({prodLogs.length} всього)</div>
               <div style={{fontSize:10, opacity:0.5}}>Шукав: {norm(selectedDateStr)}</div>
+              <div style={{fontSize:8, opacity:0.3, marginTop:5}}>Наявні дати: {Object.keys(logsByDate).slice(0,5).join(', ')}</div>
             </div>
           ) : (
             selectedLogs.map(l => {
