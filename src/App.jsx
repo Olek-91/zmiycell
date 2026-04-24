@@ -3446,16 +3446,23 @@ function AppInner({ isAdmin, onLogout }) {
 
   // ── Радіо ──────────────────────────────────────────────────
 
+
   // ── Календар ──────────────────────────────────────────────
   const PageCalendar = () => {
     const [currentDate, setCurrentDate] = useState(() => new Date())
     const [selectedDateStr, setSelectedDateStr] = useState(null)
 
-    // Обчислюємо які серійники оплачені за принципом FIFO
+    const prodLogs = useMemo(() => {
+      return (log || []).filter(l => {
+        if (l.kind === 'production') return true
+        if (l.kind === 'prep' || l.kind === 'repair') return false
+        // Запасний варіант для старих записів без kind
+        return (l.count > 0 || (l.serials && l.serials.length > 0)) && !l.prepIds
+      })
+    }, [log])
+
     const paidSerials = useMemo(() => {
       const paidSet = new Set()
-      const workerPaidMap = { ...paidByWorker } 
-      
       const paidByName = {}
       workers.forEach(w => {
         paidByName[w.name] = (paidByWorker[w.id] || 0) + (paidByWorker[w.name] || 0)
@@ -3466,43 +3473,45 @@ function AppInner({ isAdmin, onLogout }) {
         }
       })
 
-      const prodLogs = log.filter(l => l.kind === 'production').sort((a, b) => {
-        const parseDate = (d, t) => {
+      const sorted = [...prodLogs].sort((a, b) => {
+        const p = (d, t) => {
           if (!d) return 0
-          const [day, mo, yr] = d.split('.')
-          const time = t ? t.split(' ')[1] : '00:00'
-          return new Date(`${yr}-${mo}-${day}T${time}`).getTime()
+          const parts = d.split('.')
+          if (parts.length !== 3) return 0
+          const [dd, mm, yyyy] = parts
+          const time = t && t.includes(' ') ? t.split(' ')[1] : '00:00'
+          const ts = Date.parse(`${yyyy}-${mm}-${dd}T${time}`)
+          return isNaN(ts) ? 0 : ts
         }
-        return parseDate(a.date, a.datetime) - parseDate(b.date, b.datetime)
+        return p(a.date, a.datetime) - p(b.date, b.datetime)
       })
 
-      prodLogs.forEach(l => {
+      sorted.forEach(l => {
         if (!l.workerName) return
-        let availablePaid = paidByName[l.workerName] || 0
-        if (availablePaid <= 0) return 
-        
-        const serials = l.serials || []
-        serials.forEach(s => {
-          if (availablePaid > 0 && s.trim()) {
-            paidSet.add(s.trim())
-            availablePaid--
+        let rem = paidByName[l.workerName] || 0
+        if (rem <= 0) return
+        (l.serials || []).forEach(s => {
+          const sid = s?.trim()
+          if (rem > 0 && sid) {
+            paidSet.add(sid)
+            rem--
           }
         })
-        paidByName[l.workerName] = availablePaid 
+        paidByName[l.workerName] = rem
       })
-
       return paidSet
-    }, [log, paidByWorker, workers])
+    }, [prodLogs, paidByWorker, workers])
 
     const logsByDate = useMemo(() => {
       const map = {}
-      log.filter(l => l.kind === 'production').forEach(l => {
-        if (!l.date) return
-        if (!map[l.date]) map[l.date] = []
-        map[l.date].push(l)
+      prodLogs.forEach(l => {
+        const d = l.date ? l.date.trim() : ''
+        if (!d) return
+        if (!map[d]) map[d] = []
+        map[d].push(l)
       })
       return map
-    }, [log])
+    }, [prodLogs])
 
     const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))
     const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))
@@ -3584,18 +3593,20 @@ function AppInner({ isAdmin, onLogout }) {
               <div key={l.id} style={{ background: G.card2, border: `1px solid ${G.b1}`, borderRadius: 10, padding: 12, marginBottom: 8 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: getWorkerColor(l.workerName) }}>{l.workerName}</div>
-                  <div style={{ fontSize: 12, color: G.t2 }}>{l.datetime.split(' ')[1]}</div>
+                  <div style={{ fontSize: 12, color: G.t2 }}>{l.datetime && l.datetime.includes(' ') ? l.datetime.split(' ')[1] : ''}</div>
                 </div>
                 <div style={{ fontSize: 13, color: G.t1, marginBottom: 8 }}>
                   {l.typeName} <span style={{ color: G.or, fontWeight: 700 }}>({l.count} шт)</span>
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {(l.serials || []).map((s, idx) => {
-                    if (!s.trim()) return null;
-                    const isPaid = paidSerials.has(s.trim())
+                    if (!s) return null;
+                    const sid = s.toString().trim()
+                    if (!sid) return null;
+                    const isPaid = paidSerials.has(sid)
                     return (
                       <Chip key={idx} bg={isPaid ? '#052e16' : '#450a0a'} color={getWorkerColor(l.workerName)} bd={isPaid ? '#166534' : '#7f1d1d'}>
-                        {s} {isPaid ? '✅' : '⏳'}
+                        {sid} {isPaid ? '✅' : '⏳'}
                       </Chip>
                     )
                   })}
