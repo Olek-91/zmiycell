@@ -600,6 +600,13 @@ export default function App() {
 }
 
 function AppInner({ isAdmin, onLogout }) {
+  const isMe = (p, targetId) => {
+    if (!p || !targetId) return false
+    if (p.workerId === targetId) return true
+    const targetWorker = (workers || []).find(w => w.id === targetId)
+    return targetWorker && p.workerName === targetWorker.name
+  }
+
   // ── З'єднання з Zustand ──────────────────────────────────────
   const {
     materials, typeMaterials, assemblies, batteryTypes, workers, tools, log, repairLog, prepItems, payments, toolLog,
