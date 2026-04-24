@@ -3606,8 +3606,8 @@ function AppInner({ isAdmin, onLogout }) {
                 key={i} 
                 onClick={() => setSelectedDateStr(isSelected ? null : rawDate)}
                 style={{ 
-                  background: isSelected ? G.b2 : (isToday ? 'rgba(249, 115, 22, 0.2)' : G.card2), 
-                  border: `1px solid ${isSelected ? G.or : (isToday ? G.or : G.b1)}`, 
+                  background: isSelected ? G.b2 : (isToday ? 'rgba(249, 115, 22, 0.2)' : (totalCount > 0 ? G.card2 : 'rgba(239, 68, 68, 0.08)')), 
+                  border: `1px solid ${isSelected ? G.or : (isToday ? G.or : (totalCount > 0 ? G.b1 : 'rgba(239, 68, 68, 0.15)'))}`, 
                   borderRadius: 8, 
                   padding: '8px 4px', 
                   cursor: 'pointer',
