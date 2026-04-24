@@ -649,6 +649,7 @@ function AppInner({ isAdmin, onLogout }) {
     ['stock',      '📦', 'СКЛАД'],
     ['calculator', '🧮', 'КАЛЬК.'],
     ['shopping',   '🛒', 'ЗАКУП.'],
+    ['calendar',   '📅', 'КАЛЕНД.'],
     ['tools',      '🛠', 'ІНСТР.'],
     ['log',        '📋', 'ЖУРН.'],
     ['actlog',     '📜', 'ЛОГ'],
@@ -668,6 +669,7 @@ function AppInner({ isAdmin, onLogout }) {
     ['manual',     '📖', 'МАНУАЛ'],
     ['stock',      '📦', 'СКЛАД'],
     ['calculator', '🧮', 'КАЛЬК.'],
+    ['calendar',   '📅', 'КАЛЕНД.'],
     ['tools',      '🛠', 'ІНСТР.'],
     ['log',        '📋', 'ЖУРН.'],
     ['radio',      '📻', 'РАДІО'],
@@ -3443,6 +3445,169 @@ function AppInner({ isAdmin, onLogout }) {
   }
 
   // ── Радіо ──────────────────────────────────────────────────
+
+  // ── Календар ──────────────────────────────────────────────
+  const PageCalendar = () => {
+    const [currentDate, setCurrentDate] = useState(() => new Date())
+    const [selectedDateStr, setSelectedDateStr] = useState(null)
+
+    // Обчислюємо які серійники оплачені за принципом FIFO
+    const paidSerials = useMemo(() => {
+      const paidSet = new Set()
+      const workerPaidMap = { ...paidByWorker } 
+      
+      const paidByName = {}
+      workers.forEach(w => {
+        paidByName[w.name] = (paidByWorker[w.id] || 0) + (paidByWorker[w.name] || 0)
+      })
+      Object.keys(paidByWorker).forEach(k => {
+        if (!workers.find(w => w.id === k || w.name === k)) {
+          paidByName[k] = (paidByName[k] || 0) + paidByWorker[k]
+        }
+      })
+
+      const prodLogs = log.filter(l => l.kind === 'production').sort((a, b) => {
+        const parseDate = (d, t) => {
+          if (!d) return 0
+          const [day, mo, yr] = d.split('.')
+          const time = t ? t.split(' ')[1] : '00:00'
+          return new Date(`${yr}-${mo}-${day}T${time}`).getTime()
+        }
+        return parseDate(a.date, a.datetime) - parseDate(b.date, b.datetime)
+      })
+
+      prodLogs.forEach(l => {
+        if (!l.workerName) return
+        let availablePaid = paidByName[l.workerName] || 0
+        if (availablePaid <= 0) return 
+        
+        const serials = l.serials || []
+        serials.forEach(s => {
+          if (availablePaid > 0 && s.trim()) {
+            paidSet.add(s.trim())
+            availablePaid--
+          }
+        })
+        paidByName[l.workerName] = availablePaid 
+      })
+
+      return paidSet
+    }, [log, paidByWorker, workers])
+
+    const logsByDate = useMemo(() => {
+      const map = {}
+      log.filter(l => l.kind === 'production').forEach(l => {
+        if (!l.date) return
+        if (!map[l.date]) map[l.date] = []
+        map[l.date].push(l)
+      })
+      return map
+    }, [log])
+
+    const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))
+    const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))
+
+    const monthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+    let startDayOfWeek = monthStart.getDay() 
+    startDayOfWeek = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1 
+
+    const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate()
+    const monthName = currentDate.toLocaleString('uk-UA', { month: 'long', year: 'numeric' })
+    const todayFormatted = todayStr()
+
+    const days = []
+    for (let i = 0; i < startDayOfWeek; i++) days.push(null)
+    for (let i = 1; i <= daysInMonth; i++) days.push(i)
+
+    const selectedLogs = selectedDateStr ? (logsByDate[selectedDateStr] || []) : []
+
+    return wrap(<>
+      <Card>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <button onClick={prevMonth} style={{ background: G.b1, border: 'none', color: G.or, padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>&lt;</button>
+          <div style={{ fontSize: 16, fontWeight: 700, textTransform: 'capitalize' }}>{monthName}</div>
+          <button onClick={nextMonth} style={{ background: G.b1, border: 'none', color: G.or, padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>&gt;</button>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, textAlign: 'center', marginBottom: 8, fontSize: 12, color: G.t2, fontWeight: 700 }}>
+          <div>ПН</div><div>ВТ</div><div>СР</div><div>ЧТ</div><div>ПТ</div><div>СБ</div><div>НД</div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
+          {days.map((d, i) => {
+            if (!d) return <div key={i} style={{ padding: 10 }}></div>
+            
+            const dateStr = `${String(d).padStart(2, '0')}.${String(currentDate.getMonth() + 1).padStart(2, '0')}.${currentDate.getFullYear()}`
+            const dayLogs = logsByDate[dateStr] || []
+            const totalCount = dayLogs.reduce((sum, l) => sum + (l.count || 0), 0)
+            const isSelected = selectedDateStr === dateStr
+            const isToday = dateStr === todayFormatted
+
+            return (
+              <div 
+                key={i} 
+                onClick={() => setSelectedDateStr(isSelected ? null : dateStr)}
+                style={{ 
+                  background: isSelected ? G.b2 : (isToday ? 'rgba(249, 115, 22, 0.2)' : G.card2), 
+                  border: `1px solid ${isSelected ? G.or : (isToday ? G.or : G.b1)}`, 
+                  borderRadius: 8, 
+                  padding: '8px 4px', 
+                  cursor: 'pointer',
+                  textAlign: 'center',
+                  minHeight: 50,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  transition: '0.15s'
+                }}
+              >
+                <div style={{ fontSize: 14, fontWeight: isToday ? 700 : 400, color: isToday ? G.or : G.t1 }}>{d}</div>
+                {totalCount > 0 && <div style={{ fontSize: 10, color: G.cy, fontWeight: 700, marginTop: 4, background: 'rgba(6, 182, 212, 0.15)', padding: '2px 6px', borderRadius: 4 }}>{totalCount} шт</div>}
+              </div>
+            )
+          })}
+        </div>
+      </Card>
+
+      {selectedDateStr && (
+        <Card style={{ borderColor: G.or }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <CardTitle color={G.or}>📝 ДЕТАЛІ ЗА {selectedDateStr}</CardTitle>
+            <button onClick={() => setSelectedDateStr(null)} style={{ background: 'transparent', border: 'none', color: G.t2, fontSize: 16, cursor: 'pointer' }}>✕</button>
+          </div>
+          
+          {selectedLogs.length === 0 ? (
+            <Center>В цей день не було виробництва</Center>
+          ) : (
+            selectedLogs.map(l => (
+              <div key={l.id} style={{ background: G.card2, border: `1px solid ${G.b1}`, borderRadius: 10, padding: 12, marginBottom: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: getWorkerColor(l.workerName) }}>{l.workerName}</div>
+                  <div style={{ fontSize: 12, color: G.t2 }}>{l.datetime.split(' ')[1]}</div>
+                </div>
+                <div style={{ fontSize: 13, color: G.t1, marginBottom: 8 }}>
+                  {l.typeName} <span style={{ color: G.or, fontWeight: 700 }}>({l.count} шт)</span>
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {(l.serials || []).map((s, idx) => {
+                    if (!s.trim()) return null;
+                    const isPaid = paidSerials.has(s.trim())
+                    return (
+                      <Chip key={idx} bg={isPaid ? '#052e16' : '#450a0a'} color={getWorkerColor(l.workerName)} bd={isPaid ? '#166534' : '#7f1d1d'}>
+                        {s} {isPaid ? '✅' : '⏳'}
+                      </Chip>
+                    )
+                  })}
+                </div>
+              </div>
+            ))
+          )}
+        </Card>
+      )}
+    </>)
+  }
+
   const PageRadio = () => wrap(<AdFreeRockPlayer />)
 
   // ── Лог дій (адмін) ───────────────────────────────────────
@@ -3702,6 +3867,7 @@ function AppInner({ isAdmin, onLogout }) {
         <Route path="/repair" element={PageRepair()} />
         <Route path="/shopping" element={PageShopping()} />
         <Route path="/workers" element={PageWorkers()} />
+        <Route path="/calendar" element={PageCalendar()} />
         <Route path="/tools" element={PageTools()} />
         <Route path="/log" element={PageLog()} />
         <Route path="/actlog" element={PageActionLog()} />
