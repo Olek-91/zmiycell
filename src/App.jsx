@@ -784,12 +784,18 @@ function AppInner({ isAdmin, onLogout }) {
   const paidByWorker = useMemo(() => {
     const map = {}
     payments.forEach(p => {
-      const key = p.workerId || p.workerName
-      if (!key) return
-      map[key] = (map[key] || 0) + (parseInt(p.count) || 0)
+      const val = parseInt(p.count) || 0
+      const w = workers.find(wx => wx.id === p.workerId)
+      if (w) {
+        map[w.id] = (map[w.id] || 0) + val
+      } else if (p.workerName) {
+        map[p.workerName] = (map[p.workerName] || 0) + val
+      } else if (p.workerId) {
+        map[p.workerId] = (map[p.workerId] || 0) + val
+      }
     })
     return map
-  }, [payments])
+  }, [payments, workers])
 
   const producedByName = useMemo(() => {
     const map = {}
@@ -3077,7 +3083,7 @@ function AppInner({ isAdmin, onLogout }) {
         <CardTitle>👷 КОМАНДА ({realWorkers.length})</CardTitle>
         {realWorkers.map(w => {
           const produced = producedByName[w.name] || 0
-          const paid = paidByWorker[w.id] || paidByWorker[w.name] || 0
+          const paid = (paidByWorker[w.id] || 0) + (paidByWorker[w.name] || 0)
           const unpaid = Math.max(0, produced - paid)
           return <div key={w.id} style={{ padding: '10px 0', borderBottom: `1px solid ${G.b1}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
