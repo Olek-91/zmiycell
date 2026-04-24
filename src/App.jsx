@@ -3080,6 +3080,7 @@ function AppInner({ isAdmin, onLogout }) {
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
                 {isAdmin && <button onClick={() => addPayment(w)} style={{ background: '#052e16', border: `1px solid #166534`, color: G.gn, padding: '4px 10px', borderRadius: 8, cursor: 'pointer', fontSize: 12 }}>+ Оплачено</button>}
+                {isAdmin && <button onClick={() => addDebt(w)} style={{ background: '#431407', border: `1px solid #9a3412`, color: '#fb923c', padding: '4px 10px', borderRadius: 8, cursor: 'pointer', fontSize: 12 }}>+ Борг</button>}
                 {isAdmin && <button onClick={() => deleteWorker(w)} style={{ background: '#450a0a', border: 'none', color: G.rd, padding: '4px 10px', borderRadius: 8, cursor: 'pointer', fontSize: 12 }}>✕</button>}
               </div>
             </div>
