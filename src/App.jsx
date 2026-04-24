@@ -3448,10 +3448,22 @@ function AppInner({ isAdmin, onLogout }) {
 
 
 
+
   // ── Календар ──────────────────────────────────────────────
   const PageCalendar = () => {
     const [currentDate, setCurrentDate] = useState(() => new Date())
     const [selectedDateStr, setSelectedDateStr] = useState(null)
+
+    // Функція нормалізації дати для надійного порівняння
+    const norm = (str) => {
+      if (!str) return ''
+      const s = str.toString().replace(/[^0-9./-]/g, '')
+      const p = s.split(/[./-]/)
+      if (p.length !== 3) return s
+      let d, m, y;
+      if (p[0].length === 4) { [y, m, d] = p } else { [d, m, y] = p }
+      return `${d.padStart(2, '0')}.${m.padStart(2, '0')}.${y.length === 2 ? '20' + y : y}`
+    }
 
     const prodLogs = useMemo(() => {
       if (!Array.isArray(log)) return []
@@ -3459,7 +3471,6 @@ function AppInner({ isAdmin, onLogout }) {
         if (!l) return false
         if (l.kind === 'production') return true
         if (l.kind === 'prep' || l.kind === 'repair') return false
-        // Запасний варіант: якщо є count або серійники, і це не заготівля
         const c = parseInt(l.count) || 0
         const s = Array.isArray(l.serials) ? l.serials.length : 0
         return (c > 0 || s > 0) && !l.prepIds
@@ -3469,10 +3480,10 @@ function AppInner({ isAdmin, onLogout }) {
     const logsByDate = useMemo(() => {
       const map = {}
       prodLogs.forEach(l => {
-        const d = (l.date || '').toString().trim()
-        if (!d) return
-        if (!map[d]) map[d] = []
-        map[d].push(l)
+        const key = norm(l.date)
+        if (!key) return
+        if (!map[key]) map[key] = []
+        map[key].push(l)
       })
       return map
     }, [prodLogs])
@@ -3493,7 +3504,8 @@ function AppInner({ isAdmin, onLogout }) {
         const sorted = [...prodLogs].sort((a, b) => {
           const p = (d, t) => {
             if (!d) return 0
-            const parts = d.split('.')
+            const cl = d.toString().replace(/[^0-9.]/g, '')
+            const parts = cl.split('.')
             if (parts.length !== 3) return 0
             const [dd, mm, yyyy] = parts
             const time = (t && typeof t === 'string' && t.includes(' ')) ? t.split(' ')[1] : '00:00'
@@ -3517,7 +3529,7 @@ function AppInner({ isAdmin, onLogout }) {
           })
           paidByName[l.workerName] = rem
         })
-      } catch (e) { console.error('paidSerials error', e) }
+      } catch (e) {}
       return paidSet
     }, [prodLogs, paidByWorker, workers])
 
@@ -3530,13 +3542,14 @@ function AppInner({ isAdmin, onLogout }) {
 
     const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate()
     const monthName = currentDate.toLocaleString('uk-UA', { month: 'long', year: 'numeric' })
-    const todayFormatted = todayStr()
+    const todayFormatted = norm(todayStr())
 
     const days = []
     for (let i = 0; i < startDayOfWeek; i++) days.push(null)
     for (let i = 1; i <= daysInMonth; i++) days.push(i)
 
-    const selectedLogs = selectedDateStr ? (logsByDate[selectedDateStr] || []) : []
+    const currentSelectedKey = selectedDateStr ? norm(selectedDateStr) : null
+    const selectedLogs = currentSelectedKey ? (logsByDate[currentSelectedKey] || []) : []
 
     return wrap(<>
       <Card>
@@ -3554,16 +3567,17 @@ function AppInner({ isAdmin, onLogout }) {
           {days.map((d, i) => {
             if (!d) return <div key={i} style={{ padding: 10 }}></div>
             
-            const dateStr = `${String(d).padStart(2, '0')}.${String(currentDate.getMonth() + 1).padStart(2, '0')}.${currentDate.getFullYear()}`
-            const dayLogs = logsByDate[dateStr] || []
+            const rawDate = `${String(d).padStart(2, '0')}.${String(currentDate.getMonth() + 1).padStart(2, '0')}.${currentDate.getFullYear()}`
+            const dateKey = norm(rawDate)
+            const dayLogs = logsByDate[dateKey] || []
             const totalCount = dayLogs.reduce((sum, l) => sum + (parseInt(l.count) || 0), 0)
-            const isSelected = selectedDateStr === dateStr
-            const isToday = dateStr === todayFormatted
+            const isSelected = selectedDateStr === rawDate
+            const isToday = dateKey === todayFormatted
 
             return (
               <div 
                 key={i} 
-                onClick={() => setSelectedDateStr(isSelected ? null : dateStr)}
+                onClick={() => setSelectedDateStr(isSelected ? null : rawDate)}
                 style={{ 
                   background: isSelected ? G.b2 : (isToday ? 'rgba(249, 115, 22, 0.2)' : G.card2), 
                   border: `1px solid ${isSelected ? G.or : (isToday ? G.or : G.b1)}`, 
@@ -3585,8 +3599,6 @@ function AppInner({ isAdmin, onLogout }) {
             )
           })}
         </div>
-        {log.length === 0 && <Center style={{marginTop: 10, fontSize: 11, color: G.t2}}>Завантаження даних...</Center>}
-        {log.length > 0 && prodLogs.length === 0 && <Center style={{marginTop: 10, fontSize: 11, color: G.rd}}>Журнал порожній або немає записів виробництва</Center>}
       </Card>
 
       {selectedDateStr && (
