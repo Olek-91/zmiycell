@@ -1642,6 +1642,12 @@ function AppInner({ isAdmin, onLogout }) {
 
   // ── Виробництво ───────────────────────────────────────────
   const PageProd = () => {
+    useEffect(() => {
+      if (prodWorker && !workers.find(w => w.id === prodWorker)) {
+        setProdWorker('')
+      }
+    }, [workers, prodWorker])
+
     const consumed = prodType ? buildConsumed(prodType, prodWorker, prodQty) : []
     const serials = Array.from({ length: prodQty }, (_, i) => prodSerials[i] || '')
     return wrap(<>
@@ -1650,7 +1656,7 @@ function AppInner({ isAdmin, onLogout }) {
         <TypeTabs types={batteryTypes} active={prodTypeId} onSelect={id => { setProdTypeId(id); setProdSerials([]); setSnakeAte(false) }} />
         <Card>
           <FormRow label="ПРАЦІВНИК">
-            <select value={prodWorker} onChange={e => { setProdWorker(e.target.value); setSnakeAte(false) }}>
+            <select value={prodWorker} onChange={e => { setProdWorker(e.target.value); setSnakeAte(false) }}>\n              <option value="">-- ОБЕРІТЬ ПРАЦІВНИКА --</option>
               {workers.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
             </select>
           </FormRow>
