@@ -3450,28 +3450,45 @@ function AppInner({ isAdmin, onLogout }) {
 
 
 
+
   // ── Календар ──────────────────────────────────────────────
   const PageCalendar = () => {
     const [currentDate, setCurrentDate] = useState(() => new Date())
     const [selectedDateStr, setSelectedDateStr] = useState(null)
 
-    // Допоміжна функція для отримання списку серійників (масив або рядок з |)
+    // Максимально надійна нормалізація дати
+    const norm = (str) => {
+      if (!str) return ''
+      try {
+        // Беремо лише першу частину (до пробілу чи коми), щоб відсікти час
+        const first = str.toString().trim().split(',')[0].split(' ')[0]
+        const clean = first.replace(/[^0-9./-]/g, '')
+        const p = clean.split(/[./-]/)
+        if (p.length < 3) return clean.slice(0, 10)
+        
+        let d, m, y;
+        // Формат YYYY-MM-DD
+        if (p[0].length === 4) {
+          y = p[0]; m = p[1]; d = p[2];
+        } else {
+          // Формат DD.MM.YYYY
+          d = p[0]; m = p[1]; y = p[2];
+        }
+        
+        const dd = d.padStart(2, '0').slice(0, 2)
+        const mm = m.padStart(2, '0').slice(0, 2)
+        let yyyy = y.toString()
+        if (yyyy.length === 2) yyyy = '20' + yyyy
+        return `${dd}.${mm}.${yyyy.slice(0, 4)}`
+      } catch(e) { return str.toString().slice(0, 10) }
+    }
+
     const getSArr = (l) => {
       if (!l || !l.serials) return []
       if (Array.isArray(l.serials)) return l.serials
       const s = l.serials.toString().trim()
       if (!s) return []
       return s.includes('|') ? s.split('|').map(x => x.trim()) : [s]
-    }
-
-    const norm = (str) => {
-      if (!str) return ''
-      const s = str.toString().replace(/[^0-9./-]/g, '')
-      const p = s.split(/[./-]/)
-      if (p.length !== 3) return s
-      let d, m, y;
-      if (p[0].length === 4) { [y, m, d] = p } else { [d, m, y] = p }
-      return `${d.padStart(2, '0')}.${m.padStart(2, '0')}.${y.length === 2 ? '20' + y : y}`
     }
 
     const prodLogs = useMemo(() => {
@@ -3515,10 +3532,10 @@ function AppInner({ isAdmin, onLogout }) {
             if (!d) return 0
             const cl = d.toString().replace(/[^0-9.]/g, '')
             const parts = cl.split('.')
-            if (parts.length !== 3) return 0
+            if (parts.length < 3) return 0
             const [dd, mm, yyyy] = parts
             const time = (t && typeof t === 'string' && t.includes(' ')) ? t.split(' ').pop().replace(',', '') : '00:00'
-            const ts = Date.parse(`${yyyy}-${mm}-${dd}T${time}`)
+            const ts = Date.parse(`${yyyy.slice(0,4)}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}T${time}`)
             return isNaN(ts) ? 0 : ts
           }
           return p(a.date, a.datetime) - p(b.date, b.datetime)
@@ -3539,7 +3556,7 @@ function AppInner({ isAdmin, onLogout }) {
           })
           paidByName[wName] = rem
         })
-      } catch (e) { console.error('paidSerials err', e) }
+      } catch (e) {}
       return paidSet
     }, [prodLogs, paidByWorker, workers])
 
@@ -3609,6 +3626,9 @@ function AppInner({ isAdmin, onLogout }) {
             )
           })}
         </div>
+        {isAdmin && <div style={{marginTop: 8, fontSize: 8, opacity: 0.3, color: G.t2}}>
+          Dbg: {prodLogs.slice(0,2).map(l => `[${l.date}]->${norm(l.date)}`).join(' | ')}
+        </div>}
       </Card>
 
       {selectedDateStr && (
@@ -3619,7 +3639,10 @@ function AppInner({ isAdmin, onLogout }) {
           </div>
           
           {selectedLogs.length === 0 ? (
-            <Center>В цей день не було виробництва ({prodLogs.length} всього)</Center>
+            <div style={{textAlign:'center', padding:20}}>
+              <div style={{color:G.t2, marginBottom:10}}>В цей день не було виробництва ({prodLogs.length} всього)</div>
+              <div style={{fontSize:10, opacity:0.5}}>Шукав: {norm(selectedDateStr)}</div>
+            </div>
           ) : (
             selectedLogs.map(l => {
               const sArr = getSArr(l)
