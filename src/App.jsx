@@ -1077,6 +1077,11 @@ function AppInner({ isAdmin, onLogout }) {
     if (!type || !worker) return showToast('Оберіть тип та працівника', 'err')
     const serials = Array.from({ length: prodQty }, (_, i) => prodSerials[i] || '')
     for (const s of serials) if (!s?.trim()) return showToast('Введіть всі серійні номери', 'err')
+
+    // Перевірка на дублікати серійних номерів
+    const existingSerials = log.filter(l => l.kind === 'production').flatMap(l => l.serials || [])
+    const duplicates = serials.filter(s => existingSerials.includes(s.trim()))
+    if (duplicates.length > 0) return showToast(`Серійний номер вже існує: ${duplicates.join(', ')}`, 'err')
     const consumed = buildConsumed(type, worker.id, prodQty)
     const shortage = consumed.filter(c => c.fromStock > c.totalStock)
     const hasShortage = shortage.length > 0
