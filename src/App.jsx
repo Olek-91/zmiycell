@@ -3449,12 +3449,21 @@ function AppInner({ isAdmin, onLogout }) {
 
 
 
+
   // ── Календар ──────────────────────────────────────────────
   const PageCalendar = () => {
     const [currentDate, setCurrentDate] = useState(() => new Date())
     const [selectedDateStr, setSelectedDateStr] = useState(null)
 
-    // Функція нормалізації дати для надійного порівняння
+    // Допоміжна функція для отримання списку серійників (масив або рядок з |)
+    const getSArr = (l) => {
+      if (!l || !l.serials) return []
+      if (Array.isArray(l.serials)) return l.serials
+      const s = l.serials.toString().trim()
+      if (!s) return []
+      return s.includes('|') ? s.split('|').map(x => x.trim()) : [s]
+    }
+
     const norm = (str) => {
       if (!str) return ''
       const s = str.toString().replace(/[^0-9./-]/g, '')
@@ -3472,8 +3481,8 @@ function AppInner({ isAdmin, onLogout }) {
         if (l.kind === 'production') return true
         if (l.kind === 'prep' || l.kind === 'repair') return false
         const c = parseInt(l.count) || 0
-        const s = Array.isArray(l.serials) ? l.serials.length : 0
-        return (c > 0 || s > 0) && !l.prepIds
+        const sArr = getSArr(l)
+        return (c > 0 || sArr.length > 0) && !l.prepIds
       })
     }, [log])
 
@@ -3508,7 +3517,7 @@ function AppInner({ isAdmin, onLogout }) {
             const parts = cl.split('.')
             if (parts.length !== 3) return 0
             const [dd, mm, yyyy] = parts
-            const time = (t && typeof t === 'string' && t.includes(' ')) ? t.split(' ')[1] : '00:00'
+            const time = (t && typeof t === 'string' && t.includes(' ')) ? t.split(' ').pop().replace(',', '') : '00:00'
             const ts = Date.parse(`${yyyy}-${mm}-${dd}T${time}`)
             return isNaN(ts) ? 0 : ts
           }
@@ -3516,10 +3525,11 @@ function AppInner({ isAdmin, onLogout }) {
         })
 
         sorted.forEach(l => {
-          if (!l.workerName) return
-          let rem = paidByName[l.workerName] || 0
+          const wName = l.workerName || l.workerId
+          if (!wName) return
+          let rem = paidByName[wName] || 0
           if (rem <= 0) return
-          const sArr = Array.isArray(l.serials) ? l.serials : []
+          const sArr = getSArr(l)
           sArr.forEach(s => {
             const sid = s?.toString().trim()
             if (rem > 0 && sid) {
@@ -3527,9 +3537,9 @@ function AppInner({ isAdmin, onLogout }) {
               rem--
             }
           })
-          paidByName[l.workerName] = rem
+          paidByName[wName] = rem
         })
-      } catch (e) {}
+      } catch (e) { console.error('paidSerials err', e) }
       return paidSet
     }, [prodLogs, paidByWorker, workers])
 
@@ -3611,29 +3621,32 @@ function AppInner({ isAdmin, onLogout }) {
           {selectedLogs.length === 0 ? (
             <Center>В цей день не було виробництва ({prodLogs.length} всього)</Center>
           ) : (
-            selectedLogs.map(l => (
-              <div key={l.id} style={{ background: G.card2, border: `1px solid ${G.b1}`, borderRadius: 10, padding: 12, marginBottom: 8 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: getWorkerColor(l.workerName) }}>{l.workerName || 'Невідомий'}</div>
-                  <div style={{ fontSize: 12, color: G.t2 }}>{ (l.datetime && typeof l.datetime === 'string' && l.datetime.includes(' ')) ? l.datetime.split(' ')[1] : '' }</div>
+            selectedLogs.map(l => {
+              const sArr = getSArr(l)
+              return (
+                <div key={l.id} style={{ background: G.card2, border: `1px solid ${G.b1}`, borderRadius: 10, padding: 12, marginBottom: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: getWorkerColor(l.workerName) }}>{l.workerName || 'Невідомий'}</div>
+                    <div style={{ fontSize: 12, color: G.t2 }}>{ (l.datetime && typeof l.datetime === 'string' && l.datetime.includes(' ')) ? l.datetime.split(' ').pop().replace(',', '') : '' }</div>
+                  </div>
+                  <div style={{ fontSize: 13, color: G.t1, marginBottom: 8 }}>
+                    {l.typeName || 'Акумулятор'} <span style={{ color: G.or, fontWeight: 700 }}>({l.count} шт)</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {sArr.map((s, idx) => {
+                      const sid = s?.toString().trim()
+                      if (!sid) return null;
+                      const isPaid = paidSerials.has(sid)
+                      return (
+                        <Chip key={idx} bg={isPaid ? '#052e16' : '#450a0a'} color={getWorkerColor(l.workerName)} bd={isPaid ? '#166534' : '#7f1d1d'}>
+                          {sid} {isPaid ? '✅' : '⏳'}
+                        </Chip>
+                      )
+                    })}
+                  </div>
                 </div>
-                <div style={{ fontSize: 13, color: G.t1, marginBottom: 8 }}>
-                  {l.typeName || 'Акумулятор'} <span style={{ color: G.or, fontWeight: 700 }}>({l.count} шт)</span>
-                </div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {Array.isArray(l.serials) && l.serials.map((s, idx) => {
-                    const sid = s?.toString().trim()
-                    if (!sid) return null;
-                    const isPaid = paidSerials.has(sid)
-                    return (
-                      <Chip key={idx} bg={isPaid ? '#052e16' : '#450a0a'} color={getWorkerColor(l.workerName)} bd={isPaid ? '#166534' : '#7f1d1d'}>
-                        {sid} {isPaid ? '✅' : '⏳'}
-                      </Chip>
-                    )
-                  })}
-                </div>
-              </div>
-            ))
+              )
+            })
           )}
         </Card>
       )}
