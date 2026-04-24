@@ -3447,71 +3447,79 @@ function AppInner({ isAdmin, onLogout }) {
   // ── Радіо ──────────────────────────────────────────────────
 
 
+
   // ── Календар ──────────────────────────────────────────────
   const PageCalendar = () => {
     const [currentDate, setCurrentDate] = useState(() => new Date())
     const [selectedDateStr, setSelectedDateStr] = useState(null)
 
     const prodLogs = useMemo(() => {
-      return (log || []).filter(l => {
+      if (!Array.isArray(log)) return []
+      return log.filter(l => {
+        if (!l) return false
         if (l.kind === 'production') return true
         if (l.kind === 'prep' || l.kind === 'repair') return false
-        // Запасний варіант для старих записів без kind
-        return (l.count > 0 || (l.serials && l.serials.length > 0)) && !l.prepIds
+        // Запасний варіант: якщо є count або серійники, і це не заготівля
+        const c = parseInt(l.count) || 0
+        const s = Array.isArray(l.serials) ? l.serials.length : 0
+        return (c > 0 || s > 0) && !l.prepIds
       })
     }, [log])
-
-    const paidSerials = useMemo(() => {
-      const paidSet = new Set()
-      const paidByName = {}
-      workers.forEach(w => {
-        paidByName[w.name] = (paidByWorker[w.id] || 0) + (paidByWorker[w.name] || 0)
-      })
-      Object.keys(paidByWorker).forEach(k => {
-        if (!workers.find(w => w.id === k || w.name === k)) {
-          paidByName[k] = (paidByName[k] || 0) + paidByWorker[k]
-        }
-      })
-
-      const sorted = [...prodLogs].sort((a, b) => {
-        const p = (d, t) => {
-          if (!d) return 0
-          const parts = d.split('.')
-          if (parts.length !== 3) return 0
-          const [dd, mm, yyyy] = parts
-          const time = t && t.includes(' ') ? t.split(' ')[1] : '00:00'
-          const ts = Date.parse(`${yyyy}-${mm}-${dd}T${time}`)
-          return isNaN(ts) ? 0 : ts
-        }
-        return p(a.date, a.datetime) - p(b.date, b.datetime)
-      })
-
-      sorted.forEach(l => {
-        if (!l.workerName) return
-        let rem = paidByName[l.workerName] || 0
-        if (rem <= 0) return
-        (l.serials || []).forEach(s => {
-          const sid = s?.trim()
-          if (rem > 0 && sid) {
-            paidSet.add(sid)
-            rem--
-          }
-        })
-        paidByName[l.workerName] = rem
-      })
-      return paidSet
-    }, [prodLogs, paidByWorker, workers])
 
     const logsByDate = useMemo(() => {
       const map = {}
       prodLogs.forEach(l => {
-        const d = l.date ? l.date.trim() : ''
+        const d = (l.date || '').toString().trim()
         if (!d) return
         if (!map[d]) map[d] = []
         map[d].push(l)
       })
       return map
     }, [prodLogs])
+
+    const paidSerials = useMemo(() => {
+      const paidSet = new Set()
+      try {
+        const paidByName = {}
+        workers.forEach(w => {
+          paidByName[w.name] = (Number(paidByWorker[w.id]) || 0) + (Number(paidByWorker[w.name]) || 0)
+        })
+        Object.keys(paidByWorker || {}).forEach(k => {
+          if (!workers.find(w => w.id === k || w.name === k)) {
+            paidByName[k] = (paidByName[k] || 0) + Number(paidByWorker[k])
+          }
+        })
+
+        const sorted = [...prodLogs].sort((a, b) => {
+          const p = (d, t) => {
+            if (!d) return 0
+            const parts = d.split('.')
+            if (parts.length !== 3) return 0
+            const [dd, mm, yyyy] = parts
+            const time = (t && typeof t === 'string' && t.includes(' ')) ? t.split(' ')[1] : '00:00'
+            const ts = Date.parse(`${yyyy}-${mm}-${dd}T${time}`)
+            return isNaN(ts) ? 0 : ts
+          }
+          return p(a.date, a.datetime) - p(b.date, b.datetime)
+        })
+
+        sorted.forEach(l => {
+          if (!l.workerName) return
+          let rem = paidByName[l.workerName] || 0
+          if (rem <= 0) return
+          const sArr = Array.isArray(l.serials) ? l.serials : []
+          sArr.forEach(s => {
+            const sid = s?.toString().trim()
+            if (rem > 0 && sid) {
+              paidSet.add(sid)
+              rem--
+            }
+          })
+          paidByName[l.workerName] = rem
+        })
+      } catch (e) { console.error('paidSerials error', e) }
+      return paidSet
+    }, [prodLogs, paidByWorker, workers])
 
     const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))
     const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))
@@ -3548,7 +3556,7 @@ function AppInner({ isAdmin, onLogout }) {
             
             const dateStr = `${String(d).padStart(2, '0')}.${String(currentDate.getMonth() + 1).padStart(2, '0')}.${currentDate.getFullYear()}`
             const dayLogs = logsByDate[dateStr] || []
-            const totalCount = dayLogs.reduce((sum, l) => sum + (l.count || 0), 0)
+            const totalCount = dayLogs.reduce((sum, l) => sum + (parseInt(l.count) || 0), 0)
             const isSelected = selectedDateStr === dateStr
             const isToday = dateStr === todayFormatted
 
@@ -3577,6 +3585,8 @@ function AppInner({ isAdmin, onLogout }) {
             )
           })}
         </div>
+        {log.length === 0 && <Center style={{marginTop: 10, fontSize: 11, color: G.t2}}>Завантаження даних...</Center>}
+        {log.length > 0 && prodLogs.length === 0 && <Center style={{marginTop: 10, fontSize: 11, color: G.rd}}>Журнал порожній або немає записів виробництва</Center>}
       </Card>
 
       {selectedDateStr && (
@@ -3587,21 +3597,20 @@ function AppInner({ isAdmin, onLogout }) {
           </div>
           
           {selectedLogs.length === 0 ? (
-            <Center>В цей день не було виробництва</Center>
+            <Center>В цей день не було виробництва ({prodLogs.length} всього)</Center>
           ) : (
             selectedLogs.map(l => (
               <div key={l.id} style={{ background: G.card2, border: `1px solid ${G.b1}`, borderRadius: 10, padding: 12, marginBottom: 8 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: getWorkerColor(l.workerName) }}>{l.workerName}</div>
-                  <div style={{ fontSize: 12, color: G.t2 }}>{l.datetime && l.datetime.includes(' ') ? l.datetime.split(' ')[1] : ''}</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: getWorkerColor(l.workerName) }}>{l.workerName || 'Невідомий'}</div>
+                  <div style={{ fontSize: 12, color: G.t2 }}>{ (l.datetime && typeof l.datetime === 'string' && l.datetime.includes(' ')) ? l.datetime.split(' ')[1] : '' }</div>
                 </div>
                 <div style={{ fontSize: 13, color: G.t1, marginBottom: 8 }}>
-                  {l.typeName} <span style={{ color: G.or, fontWeight: 700 }}>({l.count} шт)</span>
+                  {l.typeName || 'Акумулятор'} <span style={{ color: G.or, fontWeight: 700 }}>({l.count} шт)</span>
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {(l.serials || []).map((s, idx) => {
-                    if (!s) return null;
-                    const sid = s.toString().trim()
+                  {Array.isArray(l.serials) && l.serials.map((s, idx) => {
+                    const sid = s?.toString().trim()
                     if (!sid) return null;
                     const isPaid = paidSerials.has(sid)
                     return (
