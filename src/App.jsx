@@ -886,7 +886,7 @@ function AppInner({ isAdmin, onLogout }) {
         
         // Перевіряємо скільки є на руках (якщо передано workerId)
         const onHand = !workerId ? 0 : prepItems
-          .filter(p => p.matId == ac.matId && (p.workerId == workerId || p.scope === 'all') && p.status !== 'returned')
+          .filter(p => p.matId == ac.matId && (isMe(p, workerId) || p.scope === 'all') && p.status !== 'returned')
           .reduce((s, p) => +(s + p.qty - p.returnedQty).toFixed(2), 0)
         
         const stock = cgm.stock || 0
@@ -921,7 +921,7 @@ function AppInner({ isAdmin, onLogout }) {
   // \u0420\u043e\u0437\u0440\u0430\u0445\u0443\u043d\u043e\u043a \u0432\u0438\u0442\u0440\u0430\u0442 (\u0433\u043b\u043e\u0431\u0430\u043b\u044c\u043d\u0438\u0439 \u0441\u043a\u043b\u0430\u0434) + \u0430\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u043d\u0438\u0439 fallback \u0437\u0431\u0456\u0440\u043a\u0438
   const buildConsumed = useCallback((type, workerId, qty) => {
     if (!type) return []
-    const myPrep = prepItems.filter(p => p.workerId == workerId && p.scope !== 'all' && (p.typeId == type.id || p.typeId === 'ALL') && p.status !== 'returned')
+    const myPrep = prepItems.filter(p => isMe(p, workerId) && p.scope !== 'all' && (p.typeId == type.id || p.typeId === 'ALL') && p.status !== 'returned')
     const allPrep = prepItems.filter(p => p.scope === 'all' && (p.typeId === type.id || p.typeId === 'ALL') && p.status !== 'returned')
     const tms = typeMaterials.filter(tm => tm.typeId === type.id)
     const map = new Map()
@@ -975,7 +975,7 @@ function AppInner({ isAdmin, onLogout }) {
 
   const buildAssemblyConsumed = useCallback((assembly, workerId, qty) => {
     if (!assembly) return []
-    const myPrep = prepItems.filter(p => p.workerId == workerId && p.scope !== 'all' && p.status !== 'returned')
+    const myPrep = prepItems.filter(p => isMe(p, workerId) && p.scope !== 'all' && p.status !== 'returned')
     const allPrep = prepItems.filter(p => p.scope === 'all' && p.status !== 'returned')
 
     const map = new Map()
@@ -1024,7 +1024,7 @@ function AppInner({ isAdmin, onLogout }) {
 
   const buildRepairConsumed = useCallback((repairMaterials, workerId, typeId) => {
     if (!repairMaterials || repairMaterials.length === 0) return []
-    const myPrep = prepItems.filter(p => p.workerId == workerId && p.scope !== 'all' && (p.typeId == typeId || p.typeId === 'ALL') && p.status !== 'returned')
+    const myPrep = prepItems.filter(p => isMe(p, workerId) && p.scope !== 'all' && (p.typeId == typeId || p.typeId === 'ALL') && p.status !== 'returned')
     const allPrep = prepItems.filter(p => p.scope === 'all' && (p.typeId == typeId || p.typeId === 'ALL') && p.status !== 'returned')
 
     const result = []
@@ -1120,7 +1120,7 @@ function AppInner({ isAdmin, onLogout }) {
               const doDeduct = (isTeam, amt) => {
                 if (!amt) return
                 let rem = amt
-                next.filter(p => (isTeam ? p.scope === 'all' : (p.workerId === worker.id && p.scope !== 'all')) && (p.typeId === type.id || p.typeId === 'ALL') && p.matId === c.matId && p.status !== 'returned').forEach(p => {
+                next.filter(p => (isTeam ? p.scope === 'all' : (isMe(p, worker.id) && p.scope !== 'all')) && (p.typeId === type.id || p.typeId === 'ALL') && p.matId === c.matId && p.status !== 'returned').forEach(p => {
                   if (rem <= 0) return
                   const avail = p.qty - p.returnedQty
                   const use = Math.min(avail, rem)
@@ -1422,7 +1422,7 @@ function AppInner({ isAdmin, onLogout }) {
                   const doDeduct = (isTeam, amt) => {
                     if (!amt) return
                     let rem = amt
-                    next.filter(p => (isTeam ? p.scope === 'all' : (p.workerId === worker.id && p.scope !== 'all')) && p.matId === c.matId && p.status !== 'returned').forEach(p => {
+                    next.filter(p => (isTeam ? p.scope === 'all' : (isMe(p, worker.id) && p.scope !== 'all')) && p.matId === c.matId && p.status !== 'returned').forEach(p => {
                       if (rem <= 0) return
                       const avail = p.qty - p.returnedQty
                       const use = Math.min(avail, rem)
@@ -1527,7 +1527,7 @@ function AppInner({ isAdmin, onLogout }) {
               const doDeduct = (isTeam, amt) => {
                 if (!amt) return
                 let rem = amt
-                next.filter(p => (isTeam ? p.scope === 'all' : (p.workerId == workerId && p.scope !== 'all')) && p.matId == c.matId && p.status !== 'returned').forEach(p => {
+                next.filter(p => (isTeam ? p.scope === 'all' : (isMe(p, workerId) && p.scope !== 'all')) && p.matId == c.matId && p.status !== 'returned').forEach(p => {
                   if (rem <= 0) return
                   const avail = p.qty - p.returnedQty
                   const use = Math.min(avail, rem)
@@ -2492,7 +2492,7 @@ function AppInner({ isAdmin, onLogout }) {
               const doDeduct = (isTeam, amt) => {
                 if (!amt) return
                 let rem = amt
-                next.filter(p => (isTeam ? p.scope === 'all' : (p.workerId === compWorker && p.scope !== 'all')) && (p.typeId === r.typeId || p.typeId === 'ALL') && p.matId === c.matId && p.status !== 'returned').forEach(p => {
+                next.filter(p => (isTeam ? p.scope === 'all' : (isMe(p, compWorker) && p.scope !== 'all')) && (p.typeId === r.typeId || p.typeId === 'ALL') && p.matId === c.matId && p.status !== 'returned').forEach(p => {
                   if (rem <= 0) return
                   const avail = p.qty - p.returnedQty
                   const use = Math.min(avail, rem)
@@ -2634,7 +2634,7 @@ function AppInner({ isAdmin, onLogout }) {
 
                 const canFulfill = (id, q) => {
                   const m = globalMat(id)
-                  const oh = prepItems.filter(p => p.matId == id && (p.workerId === compWorker || p.scope === 'all') && p.status !== 'returned').reduce((s, p) => +(s + p.qty - p.returnedQty).toFixed(2), 0)
+                  const oh = prepItems.filter(p => p.matId == id && (isMe(p, compWorker) || p.scope === 'all') && p.status !== 'returned').reduce((s, p) => +(s + p.qty - p.returnedQty).toFixed(2), 0)
                   const st = m?.stock || 0
                   if (oh + st >= q) return true
                   const r = assemblies.find(a => a.outputMatId == id && a.outputQty > 0 && a.components?.length > 0)
@@ -2650,7 +2650,7 @@ function AppInner({ isAdmin, onLogout }) {
 
                   // Calculate availability on hand for this worker
                   const onHand = prepItems
-                    .filter(p => (p.matId == mId) && (p.workerId === compWorker || p.scope === 'all') && p.status !== 'returned')
+                    .filter(p => (p.matId == mId) && (isMe(p, compWorker) || p.scope === 'all') && p.status !== 'returned')
                     .reduce((sum, p) => +(sum + p.qty - p.returnedQty).toFixed(2), 0)
                   const totalAvail = +(onHand + mStock).toFixed(2)
                   
